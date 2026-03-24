@@ -58,6 +58,8 @@ export default function DocumentUploadScreen() {
       Alert.alert('Error', 'Please select a file and enter a name.');
       return;
     }
+    // changes i did:
+    
 const { data: session } = await supabase.auth.getSession();
 console.log('SESSION:', session);
     setUploading(true);

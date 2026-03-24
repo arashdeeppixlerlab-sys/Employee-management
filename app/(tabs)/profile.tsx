@@ -6,6 +6,7 @@ import {
   SafeAreaView,
   ScrollView,
   Alert,
+  Platform,
 } from 'react-native';
 import {
   Card,
@@ -20,23 +21,35 @@ import AuthGuard from '../../src/components/AuthGuard';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { profile, logout } = useAuth();
+  const { profile } = useAuth();
 
-  const handleSignOut = () => {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
-            await logout();
-          },
-        },
-      ]
-    );
+  const handleSignOut = async () => {
+    // Platform-specific confirmation
+    const confirmed = Platform.OS === 'web' 
+      ? window.confirm('Are you sure you want to sign out?')
+      : await new Promise<boolean>((resolve) => {
+          Alert.alert(
+            'Sign Out',
+            'Are you sure you want to sign out?',
+            [
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Sign Out', style: 'destructive', onPress: () => resolve(true) },
+            ]
+          );
+        });
+
+    if (!confirmed) return;
+
+    try {
+      console.log('Signing out...');
+      await supabase.auth.signOut();
+      console.log('Sign out successful, redirecting to login');
+      router.replace('/login');
+    } catch (error) {
+      console.error('Sign out error:', error);
+      // Still redirect even if there's an error
+      router.replace('/login');
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -44,7 +57,7 @@ export default function ProfileScreen() {
   };
 
   return (
-    <AuthGuard>
+    <>
       <SafeAreaView style={styles.safeArea}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
           <View style={styles.container}>
@@ -142,7 +155,7 @@ export default function ProfileScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
-    </AuthGuard>
+    </>
   );
 }
 

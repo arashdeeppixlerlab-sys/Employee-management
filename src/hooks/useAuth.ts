@@ -1,11 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { AuthService } from '../services/AuthService';
 import { AuthState, LoginCredentials } from '../types/auth';
-import { useRouter } from 'expo-router';
 
 export const useAuth = () => {
   const isMounted = useRef(true);
-  const router = useRouter();
 
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
@@ -17,15 +15,10 @@ export const useAuth = () => {
   useEffect(() => {
     isMounted.current = true;
 
-    // Initialize auth service
     AuthService.initializeAuth();
 
     const initializeAuth = async () => {
       try {
-        if (isMounted.current) {
-          setAuthState(prev => ({ ...prev, loading: true, error: null }));
-        }
-
         const { user, profile } = await AuthService.getCurrentUser();
 
         if (isMounted.current) {
@@ -38,12 +31,11 @@ export const useAuth = () => {
         }
       } catch (error) {
         if (isMounted.current) {
-          // Don't show session errors to user - just clear state
           setAuthState({
             user: null,
             profile: null,
             loading: false,
-            error: null, // Clear error for session issues
+            error: null,
           });
         }
       }
@@ -59,9 +51,7 @@ export const useAuth = () => {
 
   const login = async (credentials: LoginCredentials) => {
     try {
-      if (isMounted.current) {
-        setAuthState(prev => ({ ...prev, loading: true, error: null }));
-      }
+      setAuthState(prev => ({ ...prev, loading: true, error: null }));
 
       const response = await AuthService.login(credentials);
 
@@ -79,26 +69,23 @@ export const useAuth = () => {
 
         return { success: true, profile: response.profile };
       } else {
-        if (isMounted.current) {
-          setAuthState(prev => ({
-            ...prev,
-            loading: false,
-            error: response.error || 'Login failed',
-          }));
-        }
+        setAuthState(prev => ({
+          ...prev,
+          loading: false,
+          error: response.error || 'Login failed',
+        }));
 
         return { success: false, error: response.error };
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Login failed';
+      const errorMessage =
+        error instanceof Error ? error.message : 'Login failed';
 
-      if (isMounted.current) {
-        setAuthState(prev => ({
-          ...prev,
-          loading: false,
-          error: errorMessage,
-        }));
-      }
+      setAuthState(prev => ({
+        ...prev,
+        loading: false,
+        error: errorMessage,
+      }));
 
       return { success: false, error: errorMessage };
     }
@@ -106,9 +93,7 @@ export const useAuth = () => {
 
   const logout = async () => {
     try {
-      if (isMounted.current) {
-        setAuthState(prev => ({ ...prev, loading: true, error: null }));
-      }
+      setAuthState(prev => ({ ...prev, loading: true, error: null }));
 
       const response = await AuthService.logout();
 
@@ -122,39 +107,32 @@ export const useAuth = () => {
           });
         }
 
-        // Navigate to login immediately
-        router.replace('/');
         return { success: true };
       } else {
-        if (isMounted.current) {
-          setAuthState(prev => ({
-            ...prev,
-            loading: false,
-            error: response.error || 'Logout failed',
-          }));
-        }
+        setAuthState(prev => ({
+          ...prev,
+          loading: false,
+          error: response.error || 'Logout failed',
+        }));
 
         return { success: false, error: response.error };
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Logout failed';
+      const errorMessage =
+        error instanceof Error ? error.message : 'Logout failed';
 
-      if (isMounted.current) {
-        setAuthState(prev => ({
-          ...prev,
-          loading: false,
-          error: errorMessage,
-        }));
-      }
+      setAuthState(prev => ({
+        ...prev,
+        loading: false,
+        error: errorMessage,
+      }));
 
       return { success: false, error: errorMessage };
     }
   };
 
   const clearError = () => {
-    if (isMounted.current) {
-      setAuthState(prev => ({ ...prev, error: null }));
-    }
+    setAuthState(prev => ({ ...prev, error: null }));
   };
 
   return {

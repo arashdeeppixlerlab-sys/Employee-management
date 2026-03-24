@@ -38,10 +38,11 @@ export default function LoginScreen() {
     if (result.success && result.profile) {
       clearError();
       
+      // Role-based redirect
       if (result.profile.role === 'admin') {
-        router.replace('/admin');
-      } else if (result.profile.role === 'employee') {
-        router.replace('/employee');
+        router.replace('/(admin-tabs)/dashboard');
+      } else {
+        router.replace('/(tabs)/dashboard');
       }
     }
   };

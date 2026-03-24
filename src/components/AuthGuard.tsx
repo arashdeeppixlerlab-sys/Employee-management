@@ -20,14 +20,14 @@ export default function AuthGuard({ children, requiredRole }: AuthGuardProps) {
         return;
       }
 
-      // Check role-based access
+      // Check role-based access ONLY if required
       if (requiredRole) {
         if (requiredRole === 'admin' && !isAdmin) {
-          router.replace('/employee');
+          router.replace('/(tabs)/dashboard');
           return;
         }
         if (requiredRole === 'employee' && !isEmployee) {
-          router.replace('/admin');
+          router.replace('/(tabs)/dashboard');
           return;
         }
       }

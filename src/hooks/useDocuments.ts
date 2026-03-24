@@ -60,6 +60,7 @@ export const useDocuments = () => {
       return;
     }
 
+    console.log('[FETCH_DEBUG] Starting fetch for user:', profile.id);
     setLoading(true);
     setError(null);
 
@@ -67,6 +68,7 @@ export const useDocuments = () => {
       const response = await DocumentService.getDocuments(profile.id);
 
       if (response.success && response.documents) {
+        console.log('[FETCH_DEBUG] FETCHED DOCUMENTS:', response.documents.length);
         setDocuments(response.documents);
       } else {
         setError(response.error || 'Failed to fetch documents');
@@ -93,9 +95,11 @@ export const useDocuments = () => {
       const response = await DocumentService.uploadDocument(profile.id, file, fileName);
 
       if (response.success) {
-        // Refresh documents list
+        console.log('[UPLOAD_DEBUG] Upload successful, refetching documents');
+        
+        // Refetch documents to get updated list with new document
         await fetchDocuments();
-        setUploadProgress(null);
+        
         return { success: true };
       } else {
         setError(response.error || 'Upload failed');
@@ -119,23 +123,32 @@ export const useDocuments = () => {
       return { success: false, error: 'User not authenticated' };
     }
 
+    console.log('[DELETE_DEBUG] Starting delete in hook for document:', documentId);
+
     try {
       const response = await DocumentService.deleteDocument(documentId, profile.id);
+      
+      console.log('[DELETE_DEBUG] Service delete response:', response);
 
       if (response.success) {
-        // Remove document from the list
-        setDocuments(state.documents.filter(doc => doc.id !== documentId));
+        console.log('[DELETE_DEBUG] DELETE SUCCESS - refetching documents');
+        
+        // Refetch documents to ensure UI matches DB state
+        // await fetchDocuments();
+        
         return { success: true };
       } else {
+        console.log('[DELETE_DEBUG] Delete failed:', response.error);
         setError(response.error || 'Delete failed');
         return { success: false, error: response.error };
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Delete failed';
+      console.log('[DELETE_DEBUG] Delete exception:', errorMessage);
       setError(errorMessage);
       return { success: false, error: errorMessage };
     }
-  }, [profile?.id, setError, setDocuments]);
+  }, [profile?.id, setError, fetchDocuments]);
 
   // Clear error
   const clearError = useCallback(() => {

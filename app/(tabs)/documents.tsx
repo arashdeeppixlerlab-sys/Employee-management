@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Platform } from 'react-native';
 import {
   View,
   Text,
@@ -31,6 +32,8 @@ export default function DocumentsTabScreen() {
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [pdfModalVisible, setPdfModalVisible] = useState(false);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
   
   const {
     documents,
@@ -41,9 +44,20 @@ export default function DocumentsTabScreen() {
     fetchDocuments,
   } = useDocuments();
 
+  // Fetch documents on component mount
+  useEffect(() => {
+    console.log('[MOUNT_DEBUG] Component mounted, fetching documents');
+    fetchDocuments();
+  }, [fetchDocuments]);
+
   const handleViewDocument = async (document: any) => {
     try {
-      if (!document.signed_url) {
+      console.log('[VIEW_DEBUG] Viewing document:', document.file_name);
+      
+      // Use file_url directly (bucket is public)
+      const documentUrl = document.file_url;
+      
+      if (!documentUrl) {
         Alert.alert('Error', 'Document URL not available');
         return;
       }
@@ -59,7 +73,7 @@ export default function DocumentsTabScreen() {
         setImageModalVisible(true);
       } else if (fileName.match(/\.pdf$/)) {
         // PDF - open in browser
-        await Linking.openURL(document.signed_url);
+        await Linking.openURL(documentUrl);
       } else {
         // Other files - show open dialog
         Alert.alert(
@@ -69,37 +83,103 @@ export default function DocumentsTabScreen() {
             { text: 'Cancel', style: 'cancel' },
             {
               text: 'Open',
-              onPress: () => Linking.openURL(document.signed_url),
+              onPress: () => Linking.openURL(documentUrl),
             },
           ]
         );
       }
     } catch (err) {
+      console.log('[VIEW_DEBUG] View error:', err);
       Alert.alert('Error', 'Failed to open document');
     } finally {
       setLoadingPreview(false);
     }
   };
 
+  const handleMultiSelect = () => {
+    setMultiSelectMode(!multiSelectMode);
+    setSelectedIds([]);
+  };
+
+  const toggleSelection = (id: string) => {
+    if (multiSelectMode) {
+      setSelectedIds(prev => 
+        prev.includes(id) 
+          ? prev.filter(selectedId => selectedId !== id)
+          : [...prev, id]
+      );
+    }
+  };
+
+  const handleMultiSelectDelete = () => {
+  if (selectedIds.length === 0) return;
+
+  const confirmDelete = async () => {
+    try {
+      console.log('[MULTI_DELETE_DEBUG] Deleting:', selectedIds);
+
+      await Promise.all(selectedIds.map(id => deleteDocument(id)));
+
+      console.log('[MULTI_DELETE_DEBUG] Batch delete done');
+
+      setSelectedIds([]);
+      setMultiSelectMode(false);
+
+      await fetchDocuments(); // 🔥 FORCE REFRESH
+
+    } catch (error) {
+      console.error('[MULTI_DELETE_DEBUG] Error:', error);
+      Alert.alert('Error', 'Failed to delete documents');
+    }
+  };
+
+  if (Platform.OS === 'web') {
+    const confirmed = window.confirm(`Delete ${selectedIds.length} documents?`);
+    if (confirmed) confirmDelete();
+  } else {
+    Alert.alert(
+      'Delete Documents',
+      `Delete ${selectedIds.length} documents?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: confirmDelete },
+      ]
+    );
+  }
+};
+
   const handleDeleteDocument = (document: any) => {
+  console.log('[DELETE_DEBUG] Starting delete for document:', document.id);
+
+  const confirmDelete = async () => {
+    console.log('[DELETE_DEBUG] User confirmed delete');
+
+    const result = await deleteDocument(document.id);
+
+    console.log('[DELETE_DEBUG] Delete result:', result);
+
+    if (result.success) {
+      await fetchDocuments(); // 🔥 FORCE REFRESH HERE
+    } else {
+      Alert.alert('Error', result.error || 'Delete failed');
+    }
+  };
+
+  // 🔥 FIX FOR WEB + MOBILE
+  if (Platform.OS === 'web') {
+    const confirmed = window.confirm(`Delete ${document.file_name}?`);
+    if (confirmed) confirmDelete();
+  } else {
     Alert.alert(
       'Delete Document',
       `Are you sure you want to delete ${document.file_name}?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const result = await deleteDocument(document.id);
-            if (!result.success) {
-              Alert.alert('Error', result.error || 'Failed to delete document');
-            }
-          },
-        },
+        { text: 'Delete', style: 'destructive', onPress: confirmDelete },
       ]
     );
-  };
+  }
+};
 
   const renderDocumentCard = ({ item }: { item: any }) => {
     const getFileIcon = (fileName: string) => {
@@ -138,11 +218,23 @@ export default function DocumentsTabScreen() {
       <Card style={styles.documentCard}>
         <Card.Content style={styles.cardContent}>
           <View style={styles.documentInfo}>
+            {multiSelectMode && (
+              <View style={styles.checkboxContainer}>
+                <IconButton
+                  icon={selectedIds.includes(item.id) ? "checkbox-marked" : "checkbox-blank-outline"}
+                  size={20}
+                  iconColor={selectedIds.includes(item.id) ? "#2563eb" : "#6b7280"}
+                  onPress={() => toggleSelection(item.id)}
+                />
+              </View>
+            )}
+            
             <View style={styles.fileIconContainer}>
               <IconButton
                 icon={getFileIcon(item.file_name)}
                 size={32}
                 iconColor="#2563eb"
+                onPress={() => multiSelectMode ? toggleSelection(item.id) : handleViewDocument(item)}
               />
             </View>
             
@@ -157,20 +249,22 @@ export default function DocumentsTabScreen() {
           </View>
 
           <View style={styles.actions}>
-            <Button
-              mode="outlined"
-              onPress={() => handleViewDocument(item)}
-              style={styles.viewButton}
-              compact
-            >
-              View
-            </Button>
+            {!multiSelectMode && (
+              <Button
+                mode="outlined"
+                onPress={() => handleViewDocument(item)}
+                style={styles.viewButton}
+                compact
+              >
+                View
+              </Button>
+            )}
             
             <IconButton
               icon="delete"
               size={20}
               iconColor="#ef4444"
-              onPress={() => handleDeleteDocument(item)}
+              onPress={() => multiSelectMode ? handleMultiSelectDelete() : handleDeleteDocument(item)}
             />
           </View>
         </Card.Content>
@@ -197,13 +291,30 @@ export default function DocumentsTabScreen() {
         <View style={styles.container}>
           <View style={styles.header}>
             <Text style={styles.title}>My Documents</Text>
-            <Button
-              mode="contained"
-              onPress={() => router.push('/documents/upload')}
-              style={styles.uploadButton}
-            >
-              Upload
-            </Button>
+            <View style={styles.headerActions}>
+              {multiSelectMode && selectedIds.length > 0 && (
+                <IconButton
+                  icon="delete"
+                  size={24}
+                  iconColor="#ef4444"
+                  onPress={handleMultiSelectDelete}
+                  style={styles.multiSelectDelete}
+                />
+              )}
+              <IconButton
+                icon={multiSelectMode ? "close" : "checkbox-multiple-marked"}
+                size={24}
+                iconColor="#2563eb"
+                onPress={handleMultiSelect}
+              />
+              <Button
+                mode="contained"
+                onPress={() => router.push('/documents/upload')}
+                style={styles.uploadButton}
+              >
+                Upload
+              </Button>
+            </View>
           </View>
 
           {documents.length === 0 ? (
@@ -273,11 +384,21 @@ export default function DocumentsTabScreen() {
                   <ActivityIndicator size="large" color="#2563eb" />
                   <Text style={styles.imageLoadingText}>Loading image...</Text>
                 </View>
-              ) : selectedDocument?.signed_url ? (
+              ) : selectedDocument ? (
                 <Image
-                  source={{ uri: selectedDocument.signed_url }}
+                  source={{ 
+                    uri: selectedDocument.file_url
+                  }}
                   style={styles.previewImage}
                   resizeMode="contain"
+                  onError={(error) => {
+                    console.log('[IMAGE_DEBUG] Image load error:', error);
+                    Alert.alert('Error', 'Failed to load image.');
+                    setImageModalVisible(false);
+                  }}
+                  onLoad={() => {
+                    console.log('[IMAGE_DEBUG] Image loaded successfully');
+                  }}
                 />
               ) : null}
             </View>
@@ -302,6 +423,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 24,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  multiSelectDelete: {
+    marginRight: 8,
+  },
+  checkboxContainer: {
+    marginRight: 8,
   },
   title: {
     fontSize: 28,
