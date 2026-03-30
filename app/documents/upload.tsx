@@ -59,9 +59,9 @@ export default function DocumentUploadScreen() {
       return;
     }
     // changes i did:
-    
-const { data: session } = await supabase.auth.getSession();
-console.log('SESSION:', session);
+
+    const { data: session } = await supabase.auth.getSession();
+    console.log('SESSION:', session);
     setUploading(true);
     setError(null);
     setSuccess(null);
@@ -75,9 +75,14 @@ console.log('SESSION:', session);
         return;
       }
 
-      console.log('[UPLOAD_DEBUG] UserID:', user.id);
+      console.log('[UPLOAD_DEBUG] FILE:', selectedFile); // FIX
+      console.log('[UPLOAD_DEBUG] USER:', user.id);
 
-      const response = await DocumentService.uploadDocument(user.id, selectedFile, fileName.trim());
+      const response = await DocumentService.uploadDocument(
+        selectedFile,     // FIX: file
+        user.id,          // FIX: userId
+        'employee'        // FIX: role
+      );
 
       console.log('UPLOAD_RESPONSE:', response);
 

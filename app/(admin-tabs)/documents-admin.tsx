@@ -17,6 +17,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import type { Document as AppDocument } from '../../src/types/document';
 import { useDocuments } from '../../src/hooks/useDocuments';
+import { useAuth } from '../../src/hooks/useAuth';
+import { DocumentService } from '../../src/services/documentService';
 import AuthGuard from '../../src/components/AuthGuard';
 import { supabase } from '../../src/services/supabase/supabaseClient';
 
@@ -27,12 +29,12 @@ type ProfileMini = {
 };
 
 export default function AdminDocumentsScreen() {
+  const { profile } = useAuth();
   const {
     documents,
     loading,
     uploading,
     error,
-    clearError,
     fetchDocuments,
     uploadDocument,
     deleteDocument,
@@ -134,7 +136,8 @@ export default function AdminDocumentsScreen() {
       const asset = result.assets[0] as any;
       const fileName = (asset?.name as string | undefined) || 'Document';
 
-      const resp = await uploadDocument(asset, fileName);
+      // FIX: Use DocumentService directly for admin uploads with admin role
+      const resp = await DocumentService.uploadDocument(asset, profile?.id || '', 'admin');
       if (!resp?.success) {
         Alert.alert('Error', resp.error || 'Failed to upload document');
       }
@@ -142,7 +145,7 @@ export default function AdminDocumentsScreen() {
       console.log('AdminDocuments picker/upload error:', e);
       Alert.alert('Error', 'Failed to upload document');
     }
-  }, [uploadDocument]);
+  }, [profile?.id]);
 
   const resolveDocumentOpenUrl = useCallback(
     async (doc: AppDocument & Record<string, any>): Promise<string | null> => {
@@ -323,7 +326,7 @@ export default function AdminDocumentsScreen() {
         <View style={styles.container}>
           <Snackbar
             visible={!!error}
-            onDismiss={clearError}
+            onDismiss={() => {}}
             duration={4000}
             style={styles.snackbar}
           >
