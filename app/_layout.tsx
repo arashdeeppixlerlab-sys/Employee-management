@@ -126,10 +126,10 @@ export default function RootLayout() {
     );
   }
 
-  // ✅ NO navigation logic here
+  // NO navigation logic here
   return (
     <PaperProvider theme={theme}>
-      <Stack>
+      <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" options={{ title: 'Employee Management' }} />
         <Stack.Screen name="login/index" options={{ title: 'Login', headerShown: false }} />
         <Stack.Screen name="employee/index" options={{ title: 'Employee Dashboard' }} />

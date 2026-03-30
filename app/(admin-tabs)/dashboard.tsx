@@ -7,6 +7,8 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
+  StatusBar,
+  Platform,
 } from 'react-native';
 import {
   Card,
@@ -186,13 +188,33 @@ export default function AdminDashboard() {
   return (
     <AuthGuard requiredRole="admin">
       <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Welcome Header */}
-        <View style={styles.welcomeHeader}>
-          <Text style={styles.welcomeTitle}>Welcome back, Admin</Text>
-          <Text style={styles.welcomeSubtitle}>
-            Here's what's happening with your system today
-          </Text>
+        {/* Professional Admin Header */}
+        <View style={styles.professionalHeader}>
+          <View style={styles.headerLeft}>
+            <View style={styles.adminIconContainer}>
+              <Ionicons name="shield-checkmark-outline" size={28} color="#2563eb" />
+            </View>
+            <View style={styles.headerText}>
+              <Text style={styles.adminBadge}>Administrator</Text>
+              <Text style={styles.welcomeTitle}>Welcome back, Admin</Text>
+              <Text style={styles.welcomeSubtitle}>
+                Manage your system efficiently
+              </Text>
+            </View>
+          </View>
+          <View style={styles.headerRight}>
+            <TouchableOpacity style={styles.headerButton}>
+              <Ionicons name="notifications-outline" size={22} color="#6b7280" />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.headerButton}
+              onPress={() => router.push('/(admin-tabs)/profile')}
+            >
+              <Ionicons name="settings-outline" size={22} color="#6b7280" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Stats Grid */}
@@ -330,6 +352,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#f8fafc',
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0,
   },
   scrollView: {
     flex: 1,
@@ -343,6 +366,63 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     color: '#6b7280',
+  },
+  // FIX: Professional admin header styles with proper spacing
+  professionalHeader: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+    marginBottom: 20,
+    marginTop: 12,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  adminIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#dbeafe',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 20,
+  },
+  headerText: {
+    flex: 1,
+  },
+  adminBadge: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#2563eb',
+    backgroundColor: '#dbeafe',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   welcomeHeader: {
     paddingHorizontal: 24,

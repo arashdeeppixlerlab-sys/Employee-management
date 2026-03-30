@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
+import {
+  View,
+  Text,
+  StyleSheet,
   SafeAreaView,
   ActivityIndicator,
   ScrollView,
@@ -183,7 +183,10 @@ export default function AdminProfile() {
         remainingPayload = rest;
       }
 
-      return { success: false as const, error: null };
+      return {
+        success: false as const,
+        error: new Error('Profile update failed - unknown issue'),
+      };
     };
 
     try {
@@ -195,7 +198,7 @@ export default function AdminProfile() {
       const result = await updateWithMissingColumnFallback(userId, payload);
       if (!result.success) {
         const message = result.error?.message || 'Failed to save profile';
-        console.error('Admin profile update error:', result.error);
+        console.error('Admin profile FULL error:', JSON.stringify(result.error, null, 2));
         Alert.alert('Error', message);
         return;
       }
@@ -236,15 +239,15 @@ export default function AdminProfile() {
     const confirmed = Platform.OS === 'web'
       ? window.confirm('Are you sure you want to sign out?')
       : await new Promise<boolean>((resolve) => {
-          Alert.alert(
-            'Sign Out',
-            'Are you sure you want to sign out?',
-            [
-              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-              { text: 'Sign Out', style: 'destructive', onPress: () => resolve(true) },
-            ]
-          );
-        });
+        Alert.alert(
+          'Sign Out',
+          'Are you sure you want to sign out?',
+          [
+            { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Sign Out', style: 'destructive', onPress: () => resolve(true) },
+          ]
+        );
+      });
 
     if (!confirmed) return;
 
@@ -306,209 +309,209 @@ export default function AdminProfile() {
     <AuthGuard requiredRole="admin">
       <SafeAreaView style={styles.safeArea}>
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Profile Header */}
-        <View style={styles.header}>
-          <View style={styles.profileHeader}>
-            <Avatar.Text 
-              size={80} 
-              label={profile?.name?.charAt(0).toUpperCase() || profile?.email?.charAt(0).toUpperCase() || 'A'}
-              style={styles.avatar}
-              labelStyle={styles.avatarLabel}
-            />
-            <View style={styles.profileInfo}>
-              <Text style={styles.profileName}>
-                {profile?.name || 'Admin User'}
-              </Text>
-              <Text style={styles.profileEmail}>{profile?.email}</Text>
-              <View style={styles.roleBadge}>
-                <Text style={styles.roleText}>Administrator</Text>
+          {/* Profile Header */}
+          <View style={styles.header}>
+            <View style={styles.profileHeader}>
+              <Avatar.Text
+                size={80}
+                label={profile?.name?.charAt(0).toUpperCase() || profile?.email?.charAt(0).toUpperCase() || 'A'}
+                style={styles.avatar}
+                labelStyle={styles.avatarLabel}
+              />
+              <View style={styles.profileInfo}>
+                <Text style={styles.profileName}>
+                  {profile?.name || 'Admin User'}
+                </Text>
+                <Text style={styles.profileEmail}>{profile?.email}</Text>
+                <View style={styles.roleBadge}>
+                  <Text style={styles.roleText}>Administrator</Text>
+                </View>
               </View>
             </View>
           </View>
-        </View>
 
-        {/* Stats Cards */}
-        <View style={styles.statsContainer}>
-          <Card style={styles.statCard}>
-            <View style={styles.statContent}>
-              <Ionicons name="people-outline" size={24} color="#2563eb" />
-              <Text style={styles.statNumber}>{employeeCount}</Text>
-              <Text style={styles.statLabel}>Total Employees</Text>
-            </View>
-          </Card>
-          
-          <Card style={styles.statCard}>
-            <View style={styles.statContent}>
-              <Ionicons name="document-text-outline" size={24} color="#2563eb" />
-              <Text style={styles.statNumber}>{documentCount}</Text>
-              <Text style={styles.statLabel}>Documents</Text>
-            </View>
-          </Card>
-        </View>
+          {/* Stats Cards */}
+          <View style={styles.statsContainer}>
+            <Card style={styles.statCard}>
+              <View style={styles.statContent}>
+                <Ionicons name="people-outline" size={24} color="#2563eb" />
+                <Text style={styles.statNumber}>{employeeCount}</Text>
+                <Text style={styles.statLabel}>Total Employees</Text>
+              </View>
+            </Card>
 
-        {/* Account Information */}
-        <Card style={styles.infoCard}>
-          <Card.Content>
-            <Text style={styles.sectionTitle}>Account Information</Text>
-            
-            <View style={styles.infoRow}>
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Full Name</Text>
-                <Text style={styles.infoValue}>
-                  {profile?.name || 'Not specified'}
-                </Text>
+            <Card style={styles.statCard}>
+              <View style={styles.statContent}>
+                <Ionicons name="document-text-outline" size={24} color="#2563eb" />
+                <Text style={styles.statNumber}>{documentCount}</Text>
+                <Text style={styles.statLabel}>Documents</Text>
               </View>
-            </View>
-            
-            <Divider style={styles.divider} />
-            
-            <View style={styles.infoRow}>
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Email Address</Text>
-                <Text style={styles.infoValue}>{profile?.email}</Text>
-              </View>
-            </View>
-            
-            <Divider style={styles.divider} />
-            
-            <View style={styles.infoRow}>
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Account Type</Text>
-                <Text style={styles.infoValue}>Administrator</Text>
-              </View>
-            </View>
-          </Card.Content>
-        </Card>
+            </Card>
+          </View>
 
-        {/* Profile Edit */}
-        {editMode ? (
-          <Card style={styles.editCard}>
+          {/* Account Information */}
+          <Card style={styles.infoCard}>
             <Card.Content>
-              <Text style={styles.sectionTitle}>Edit Profile</Text>
+              <Text style={styles.sectionTitle}>Account Information</Text>
 
-              <TextInput
-                label="Email"
-                value={form.email || ''}
-                onChangeText={(t) => setForm((prev) => ({ ...prev, email: t }))}
-                mode="outlined"
-                style={styles.textInput}
-                autoCapitalize="none"
-                keyboardType="email-address"
-              />
-              <TextInput
-                label="Name"
-                value={form.name}
-                onChangeText={(t) => setForm((prev) => ({ ...prev, name: t }))}
-                mode="outlined"
-                style={styles.textInput}
-              />
-              <TextInput
-                label="Bio"
-                value={form.bio}
-                onChangeText={(t) => setForm((prev) => ({ ...prev, bio: t }))}
-                mode="outlined"
-                style={styles.textInput}
-                multiline
-              />
-              <TextInput
-                label="Education"
-                value={form.education}
-                onChangeText={(t) => setForm((prev) => ({ ...prev, education: t }))}
-                mode="outlined"
-                style={styles.textInput}
-                multiline
-              />
-              <TextInput
-                label="Age"
-                value={form.age}
-                onChangeText={(t) => setForm((prev) => ({ ...prev, age: t }))}
-                mode="outlined"
-                style={styles.textInput}
-                keyboardType="numeric"
-              />
-              <TextInput
-                label="Address"
-                value={form.address}
-                onChangeText={(t) => setForm((prev) => ({ ...prev, address: t }))}
-                mode="outlined"
-                style={styles.textInput}
-                multiline
-              />
+              <View style={styles.infoRow}>
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>Full Name</Text>
+                  <Text style={styles.infoValue}>
+                    {profile?.name || 'Not specified'}
+                  </Text>
+                </View>
+              </View>
 
-              <View style={styles.editActions}>
-                <Button
-                  mode="outlined"
-                  onPress={handleCancelEdit}
-                  style={styles.editButton}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  mode="contained"
-                  onPress={handleSaveProfile}
-                  style={styles.editButton}
-                >
-                  Save
-                </Button>
+              <Divider style={styles.divider} />
+
+              <View style={styles.infoRow}>
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>Email Address</Text>
+                  <Text style={styles.infoValue}>{profile?.email}</Text>
+                </View>
+              </View>
+
+              <Divider style={styles.divider} />
+
+              <View style={styles.infoRow}>
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>Account Type</Text>
+                  <Text style={styles.infoValue}>Administrator</Text>
+                </View>
               </View>
             </Card.Content>
           </Card>
-        ) : (
-          <Button
-            mode="contained"
-            onPress={handleEditPress}
-            style={styles.editProfileButton}
-          >
-            Edit Profile
-          </Button>
-        )}
 
-        {/* Menu Items */}
-        <View style={styles.menuContainer}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          {menuItems.map((item, index) => (
-            <TouchableOpacity 
-              key={index} 
-              style={styles.menuItem}
-              onPress={item.onPress}
-              activeOpacity={0.7}
-            >
-              <View style={styles.menuItemLeft}>
-                <Ionicons 
-                  name={item.icon as any} 
-                  size={24} 
-                  color="#6b7280" 
-                  style={styles.menuIcon}
+          {/* Profile Edit */}
+          {editMode ? (
+            <Card style={styles.editCard}>
+              <Card.Content>
+                <Text style={styles.sectionTitle}>Edit Profile</Text>
+
+                <TextInput
+                  label="Email"
+                  value={form.email || ''}
+                  onChangeText={(t) => setForm((prev) => ({ ...prev, email: t }))}
+                  mode="outlined"
+                  style={styles.textInput}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
                 />
-                <View style={styles.menuText}>
-                  <Text style={styles.menuTitle}>{item.title}</Text>
-                  <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
+                <TextInput
+                  label="Name"
+                  value={form.name}
+                  onChangeText={(t) => setForm((prev) => ({ ...prev, name: t }))}
+                  mode="outlined"
+                  style={styles.textInput}
+                />
+                <TextInput
+                  label="Bio"
+                  value={form.bio}
+                  onChangeText={(t) => setForm((prev) => ({ ...prev, bio: t }))}
+                  mode="outlined"
+                  style={styles.textInput}
+                  multiline
+                />
+                <TextInput
+                  label="Education"
+                  value={form.education}
+                  onChangeText={(t) => setForm((prev) => ({ ...prev, education: t }))}
+                  mode="outlined"
+                  style={styles.textInput}
+                  multiline
+                />
+                <TextInput
+                  label="Age"
+                  value={form.age}
+                  onChangeText={(t) => setForm((prev) => ({ ...prev, age: t }))}
+                  mode="outlined"
+                  style={styles.textInput}
+                  keyboardType="numeric"
+                />
+                <TextInput
+                  label="Address"
+                  value={form.address}
+                  onChangeText={(t) => setForm((prev) => ({ ...prev, address: t }))}
+                  mode="outlined"
+                  style={styles.textInput}
+                  multiline
+                />
+
+                <View style={styles.editActions}>
+                  <Button
+                    mode="outlined"
+                    onPress={handleCancelEdit}
+                    style={styles.editButton}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    mode="contained"
+                    onPress={handleSaveProfile}
+                    style={styles.editButton}
+                  >
+                    Save
+                  </Button>
                 </View>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-            </TouchableOpacity>
-          ))}
-        </View>
+              </Card.Content>
+            </Card>
+          ) : (
+            <Button
+              mode="contained"
+              onPress={handleEditPress}
+              style={styles.editProfileButton}
+            >
+              Edit Profile
+            </Button>
+          )}
 
-        {/* Logout Button */}
-        <View style={styles.logoutContainer}>
-          <Button 
-            mode="outlined" 
-            onPress={handleLogout}
-            style={styles.logoutButton}
-            contentStyle={styles.logoutButtonContent}
-            textColor="#ef4444"
-          >
-            <Ionicons name="log-out-outline" size={20} style={{ marginRight: 8 }} />
-            Sign Out
-          </Button>
-        </View>
+          {/* Menu Items */}
+          <View style={styles.menuContainer}>
+            <Text style={styles.sectionTitle}>Quick Actions</Text>
+            {menuItems.map((item, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.menuItem}
+                onPress={item.onPress}
+                activeOpacity={0.7}
+              >
+                <View style={styles.menuItemLeft}>
+                  <Ionicons
+                    name={item.icon as any}
+                    size={24}
+                    color="#6b7280"
+                    style={styles.menuIcon}
+                  />
+                  <View style={styles.menuText}>
+                    <Text style={styles.menuTitle}>{item.title}</Text>
+                    <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+              </TouchableOpacity>
+            ))}
+          </View>
 
-        {/* App Version */}
-        <View style={styles.footer}>
-          <Text style={styles.versionText}>Employee Management System</Text>
-          <Text style={styles.versionNumber}>Version 1.0.0</Text>
-        </View>
+          {/* Logout Button */}
+          <View style={styles.logoutContainer}>
+            <Button
+              mode="outlined"
+              onPress={handleLogout}
+              style={styles.logoutButton}
+              contentStyle={styles.logoutButtonContent}
+              textColor="#ef4444"
+            >
+              <Ionicons name="log-out-outline" size={20} style={{ marginRight: 8 }} />
+              Sign Out
+            </Button>
+          </View>
+
+          {/* App Version */}
+          <View style={styles.footer}>
+            <Text style={styles.versionText}>Employee Management System</Text>
+            <Text style={styles.versionNumber}>Version 1.0.0</Text>
+          </View>
         </ScrollView>
       </SafeAreaView>
     </AuthGuard>
@@ -742,5 +745,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#9ca3af',
   },
-  
+
 });

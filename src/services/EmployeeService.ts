@@ -2,7 +2,6 @@ import { supabase } from '../services/supabase/supabaseClient';
 import { Profile } from '../types/auth';
 
 export interface Employee extends Profile {
-  name?: string; // Optional name field if it exists in the database
 }
 
 export class EmployeeService {

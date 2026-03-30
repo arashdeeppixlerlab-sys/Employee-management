@@ -11,6 +11,7 @@ import {
   Alert,
   Linking
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons'; // FIX: Add back button icon
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { EmployeeService, Employee } from '../../src/services/EmployeeService';
 import { DocumentService } from '../../src/services/documentService';
@@ -128,9 +129,20 @@ console.log("admin employee id:" ,employee?.id);
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      {/* FIX: Add header with back button */}
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={() => router.back()}
+        >
+          <Ionicons name="chevron-back" size={24} color="#2563eb" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Employee Details</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+      
       <ScrollView style={styles.scrollView}>
         <View style={styles.container}>
-          <Text style={styles.title}>Employee Details</Text>
           
           <View style={styles.detailsCard}>
             <View style={styles.detailRow}>
@@ -159,6 +171,37 @@ console.log("admin employee id:" ,employee?.id);
               <Text style={styles.detailLabel}>Joined</Text>
               <Text style={styles.detailValue}>
                 {new Date(employee.created_at).toLocaleDateString()}
+              </Text>
+            </View>
+          </View>
+          
+          {/* FIX: Add additional profile fields */}
+          <View style={styles.detailsCard}>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Bio</Text>
+              <Text style={styles.detailValue}>
+                {employee.bio || 'Not provided'}
+              </Text>
+            </View>
+            
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Education</Text>
+              <Text style={styles.detailValue}>
+                {employee.education || 'Not provided'}
+              </Text>
+            </View>
+            
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Age</Text>
+              <Text style={styles.detailValue}>
+                {employee.age || 'Not provided'}
+              </Text>
+            </View>
+            
+            <View style={[styles.detailRow, styles.detailRowLast]}>
+              <Text style={styles.detailLabel}>Address</Text>
+              <Text style={styles.detailValue}>
+                {employee.address || 'Not provided'}
               </Text>
             </View>
           </View>
@@ -205,6 +248,30 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#ffffff',
+  },
+  // FIX: Add header styles
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#ffffff',
+  },
+  backButton: {
+    padding: 8,
+    borderRadius: 8,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111111',
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 40,
   },
   scrollView: {
     flex: 1,

@@ -10,7 +10,7 @@ export default function AdminTabLayout() {
     <Tabs
       screenOptions={{
         lazy: true,
-        headerShown: true,
+        headerShown: false, // FIX: Hide default headers to prevent duplication
         tabBarActiveTintColor: '#2563eb',
         tabBarInactiveTintColor: '#6b7280',
         tabBarStyle: {
@@ -67,8 +67,7 @@ export default function AdminTabLayout() {
         name="employee-details"
         options={{
           href: null,
-          title: "Employee Details",
-          headerShown: true
+          headerShown: false // FIX: Hide stack header since screen has custom header
         }}
       />
     </Tabs>

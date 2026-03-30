@@ -4,6 +4,11 @@ export interface Profile {
   role: 'admin' | 'employee';
   created_at: string;
   updated_at: string;
+  name?: string;
+  bio?: string;
+  education?: string;
+  age?: number;
+  address?: string;
 }
 
 export interface AuthResponse {

@@ -5,12 +5,16 @@ import {
   StyleSheet,
   SafeAreaView,
   ScrollView,
+  StatusBar,
+  Platform,
 } from 'react-native';
 import {
   Card,
   Button,
   IconButton,
+  Avatar,
 } from 'react-native-paper';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useDocuments } from '../../src/hooks/useDocuments';
@@ -30,22 +34,41 @@ export default function DashboardScreen() {
   return (
     <AuthGuard requiredRole="employee">
       <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
           <View style={styles.container}>
-            {/* Welcome Header */}
-            <View style={styles.header}>
-              <View>
-                <Text style={styles.welcomeText}>Welcome back,</Text>
-                <Text style={styles.userName}>
-                  {profile?.email?.split('@')[0] || 'User'}
-                </Text>
+            {/* Professional Header */}
+            <View style={styles.professionalHeader}>
+              <View style={styles.headerLeft}>
+                <Avatar.Text 
+                  size={48} 
+                  label={profile?.email?.[0]?.toUpperCase() || 'U'}
+                  style={styles.avatar}
+                  labelStyle={styles.avatarLabel}
+                />
+                <View style={styles.headerText}>
+                  <Text style={styles.greeting}>Good morning!</Text>
+                  <Text style={styles.userName}>
+                    {profile?.email?.split('@')[0] || 'User'}
+                  </Text>
+                </View>
               </View>
-              <IconButton
-                icon="cog"
-                size={24}
-                iconColor="#6b7280"
-                onPress={() => router.push('/(tabs)/profile')}
-              />
+              <View style={styles.headerRight}>
+                <IconButton
+                  icon="bell-outline"
+                  size={22}
+                  iconColor="#6b7280"
+                  style={styles.headerButton}
+                  onPress={() => {}}
+                />
+                <IconButton
+                  icon="cog-outline"
+                  size={22}
+                  iconColor="#6b7280"
+                  style={styles.headerButton}
+                  onPress={() => router.push('/(tabs)/profile')}
+                />
+              </View>
             </View>
 
             {/* Quick Stats */}
@@ -163,7 +186,8 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f8fafc',
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0,
   },
   scrollView: {
     flex: 1,
@@ -175,14 +199,50 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 20,
   },
-  header: {
+  // FIX: Professional header styles with proper spacing
+  professionalHeader: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 20,
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+    marginBottom: 8,
+    marginTop: 8,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  avatar: {
+    backgroundColor: '#2563eb',
+    marginRight: 16,
+  },
+  avatarLabel: {
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  headerText: {
+    flex: 1,
+  },
+  greeting: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 2,
+  },
+  headerRight: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  welcomeText: {
-    fontSize: 16,
-    color: '#6b7280',
+  headerButton: {
+    backgroundColor: '#f3f4f6',
+    marginHorizontal: 4,
   },
   userName: {
     fontSize: 24,

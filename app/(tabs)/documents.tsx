@@ -12,6 +12,7 @@ import {
   Dimensions,
   Modal,
   ActivityIndicator,
+  StatusBar,
 } from 'react-native';
 import {
   Button,
@@ -22,6 +23,7 @@ import {
 } from 'react-native-paper';
 import { Image } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useDocuments } from '../../src/hooks/useDocuments';
 import AuthGuard from '../../src/components/AuthGuard';
 import { supabase } from '../../src/services/supabase/supabaseClient';
@@ -42,7 +44,6 @@ export default function DocumentsTabScreen() {
     loading,
     error,
     deleteDocument,
-    clearError,
     fetchDocuments,
   } = useDocuments();
 
@@ -376,32 +377,36 @@ export default function DocumentsTabScreen() {
   return (
     <AuthGuard>
       <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
         <View style={styles.container}>
-          <View style={styles.header}>
-            <Text style={styles.title}>My Documents</Text>
+          {/* Professional Documents Header */}
+          <View style={styles.professionalHeader}>
+            <View style={styles.headerLeft}>
+              <View style={styles.documentsIconContainer}>
+                <Ionicons name="document-text-outline" size={24} color="#2563eb" />
+              </View>
+              <View style={styles.headerText}>
+                <Text style={styles.title}>My Documents</Text>
+                <Text style={styles.subtitle}>{documents.length} documents</Text>
+              </View>
+            </View>
             <View style={styles.headerActions}>
               {multiSelectMode && selectedIds.length > 0 && (
                 <IconButton
                   icon="delete"
-                  size={24}
+                  size={20}
                   iconColor="#ef4444"
-                  onPress={handleMultiSelectDelete}
-                  style={styles.multiSelectDelete}
+                  onPress={() => handleMultiSelectDelete()}
+                  style={styles.actionButton}
                 />
               )}
-              <IconButton
-                icon={multiSelectMode ? "close" : "checkbox-multiple-marked"}
-                size={24}
-                iconColor="#2563eb"
-                onPress={handleMultiSelect}
-              />
-              <Button
-                mode="contained"
+              <TouchableOpacity 
+                style={styles.uploadButton} 
                 onPress={() => router.push('/documents/upload')}
-                style={styles.uploadButton}
               >
-                Upload
-              </Button>
+                <Ionicons name="add" size={20} color="#ffffff" />
+                <Text style={styles.uploadButtonText}>Upload</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -439,7 +444,7 @@ export default function DocumentsTabScreen() {
 
         <Snackbar
           visible={!!error}
-          onDismiss={clearError}
+          onDismiss={() => {}}
           duration={4000}
           style={styles.snackbar}
         >
@@ -500,35 +505,81 @@ export default function DocumentsTabScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f8fafc',
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0,
   },
   container: {
     flex: 1,
     padding: 16,
+    backgroundColor: '#f8fafc',
   },
-  header: {
+  professionalHeader: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 20,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+    marginBottom: 20,
+    marginTop: 8,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  documentsIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#dbeafe',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  headerText: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111111',
+    marginBottom: 2,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#6b7280',
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
-  multiSelectDelete: {
-    marginRight: 8,
-  },
-  checkboxContainer: {
-    marginRight: 8,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111111',
+  actionButton: {
+    backgroundColor: '#f3f4f6',
+    borderRadius: 20,
   },
   uploadButton: {
     backgroundColor: '#2563eb',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 6,
+  },
+  uploadButtonText: {
+    color: '#ffffff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  checkboxContainer: {
+    marginRight: 8,
   },
   loadingContainer: {
     flex: 1,

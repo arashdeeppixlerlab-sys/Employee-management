@@ -101,7 +101,7 @@ export default function ProfileScreen() {
       Alert.alert('Validation', 'Email is required');
       return;
     }
-    
+
     const nameTrimmed = (form.name ?? '').trim();
     if (!nameTrimmed) {
       Alert.alert('Validation', 'Name is required');
@@ -161,7 +161,10 @@ export default function ProfileScreen() {
         remainingPayload = rest;
       }
 
-      return { success: false as const, error: null };
+      return {
+        success: false as const,
+        error: new Error('Profile update failed - unknown issue'),
+      };
     };
 
     try {
@@ -210,18 +213,18 @@ export default function ProfileScreen() {
 
   const handleSignOut = async () => {
     // Platform-specific confirmation
-    const confirmed = Platform.OS === 'web' 
+    const confirmed = Platform.OS === 'web'
       ? window.confirm('Are you sure you want to sign out?')
       : await new Promise<boolean>((resolve) => {
-          Alert.alert(
-            'Sign Out',
-            'Are you sure you want to sign out?',
-            [
-              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-              { text: 'Sign Out', style: 'destructive', onPress: () => resolve(true) },
-            ]
-          );
-        });
+        Alert.alert(
+          'Sign Out',
+          'Are you sure you want to sign out?',
+          [
+            { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Sign Out', style: 'destructive', onPress: () => resolve(true) },
+          ]
+        );
+      });
 
     if (!confirmed) return;
 
@@ -272,19 +275,19 @@ export default function ProfileScreen() {
             <Card style={styles.infoCard}>
               <Card.Content>
                 <Text style={styles.sectionTitle}>Account Information</Text>
-                
+
                 <List.Item
                   title="Email Address"
                   description={displayProfile?.email || 'Not available'}
                   left={(props) => <List.Icon {...props} icon="email" />}
                 />
-                
+
                 <List.Item
                   title="User Role"
                   description={displayProfile?.role || 'Unknown'}
                   left={(props) => <List.Icon {...props} icon="account-badge" />}
                 />
-                
+
                 <List.Item
                   title="Member Since"
                   description={
@@ -292,7 +295,7 @@ export default function ProfileScreen() {
                   }
                   left={(props) => <List.Icon {...props} icon="calendar" />}
                 />
-                
+
                 <List.Item
                   title="Last Updated"
                   description={
@@ -390,21 +393,21 @@ export default function ProfileScreen() {
             <Card style={styles.actionsCard}>
               <Card.Content>
                 <Text style={styles.sectionTitle}>Quick Actions</Text>
-                
+
                 <List.Item
                   title="View Dashboard"
                   description="Go to main dashboard"
                   left={(props) => <List.Icon {...props} icon="view-dashboard" />}
                   onPress={() => router.push('/(tabs)/dashboard')}
                 />
-                
+
                 <List.Item
                   title="My Documents"
                   description="View and manage documents"
                   left={(props) => <List.Icon {...props} icon="folder" />}
                   onPress={() => router.push('/(tabs)/documents')}
                 />
-                
+
                 <List.Item
                   title="Upload Document"
                   description="Add a new document"

@@ -35,55 +35,52 @@ export const DocumentService = {
       const storagePath = `documents/${userId}/${storageFileName}`;
 
       const contentType =
-        (file.type || file.mimeType || '').toString().trim() ||
-        'application/octet-stream';
-
-      // Ensure proper file object
-      const isWeb = file.uri?.startsWith('blob:');
+        file.mimeType || file.type || 'application/octet-stream';
 
       let uploadData: any;
 
+      const isWeb = typeof window !== 'undefined';
+
       if (isWeb) {
-        console.log('[UPLOAD] Using WEB blob upload');
+        console.log('[UPLOAD] WEB');
 
-        // Convert blob URL to actual Blob
         const response = await fetch(file.uri);
-        const blob = await response.blob();
+        uploadData = await response.blob();
 
-        uploadData = blob;
       } else {
-        console.log('[UPLOAD] Using RN file upload');
+        console.log('[UPLOAD] RN');
 
-        uploadData = {
-          uri: file.uri,
-          name: file.name,
-          type: contentType,
-        };
+        // 🔥 FIX: Convert to blob for React Native
+        const response = await fetch(file.uri);
+        uploadData = await response.blob();
       }
 
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from('documents')
         .upload(storagePath, uploadData, {
           contentType,
         });
+
       if (error) {
         console.log('[UPLOAD ERROR]:', error);
         return { success: false, error: error.message };
       }
 
-      // Get public URL
       const { data: urlData } = supabase.storage
         .from('documents')
         .getPublicUrl(storagePath);
 
       const publicUrl = urlData?.publicUrl;
 
-      // Save metadata
+      if (!publicUrl) {
+        return { success: false, error: 'Failed to generate file URL' };
+      }
+
       const { data: insertData, error: dbError } = await supabase
         .from('documents')
         .insert({
           employee_id: userId,
-          file_name: fileName || uploadData.name,
+          file_name: fileName || file.name || 'file',
           file_url: publicUrl,
         })
         .select();
@@ -93,7 +90,6 @@ export const DocumentService = {
         return { success: false, error: dbError.message };
       }
 
-      console.log('[UPLOAD SUCCESS]');
       return { success: true, data: insertData };
 
     } catch (error) {
@@ -104,7 +100,6 @@ export const DocumentService = {
       };
     }
   },
-
   async getDocuments(userId: string): Promise<DocumentListResponse> {
     try {
       console.log('[FETCH] user:', userId);
