@@ -5,16 +5,67 @@ import {
   StyleSheet, 
   SafeAreaView, 
   ActivityIndicator,
-  ScrollView
+  ScrollView,
+  FlatList,
+  TouchableOpacity,
+  Alert,
+  Linking
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { EmployeeService, Employee } from '../../src/services/EmployeeService';
+import { DocumentService } from '../../src/services/documentService';
+import { supabase } from '../../src/services/supabase/supabaseClient';
 
 export default function EmployeeDetails() {
   const [employee, setEmployee] = useState<Employee | null>(null);
+  const [documents, setDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+
+  const resolveEmployeeDocUrl = async (doc: any): Promise<string | null> => {
+    const bucket = 'documents';
+    const fileUrl: string | undefined = doc?.file_url;
+
+    if (!fileUrl || typeof fileUrl !== 'string') return null;
+
+    const isHttp = fileUrl.startsWith('http://') || fileUrl.startsWith('https://');
+    if (isHttp) {
+      const publicMarker = `/storage/v1/object/public/${bucket}/`;
+      const idx = fileUrl.indexOf(publicMarker);
+      if (idx !== -1) {
+        const objectPath = fileUrl.substring(idx + publicMarker.length);
+        if (objectPath) {
+          const { data: signedData, error: signedError } =
+            await supabase.storage.from(bucket).createSignedUrl(objectPath, 60 * 60);
+          if (!signedError && signedData?.signedUrl) return signedData.signedUrl;
+        }
+      }
+      return fileUrl;
+    }
+
+    const objectPath =
+      fileUrl.startsWith(`${bucket}/`) ? fileUrl.slice(bucket.length + 1) : fileUrl;
+    const { data: signedData, error: signedError } =
+      await supabase.storage.from(bucket).createSignedUrl(objectPath, 60 * 60);
+    if (!signedError && signedData?.signedUrl) return signedData.signedUrl;
+    return null;
+  };
+
+  const handleViewEmployeeDocument = async (doc: any) => {
+    try {
+      const resolvedUrl = await resolveEmployeeDocUrl(doc);
+      if (!resolvedUrl) {
+        Alert.alert('Error', 'Document URL not available');
+        return;
+      }
+      await Linking.openURL(resolvedUrl);
+    } catch (e) {
+      console.log('[VIEW_DEBUG][ADMIN-EMPLOYEE] openURL error:', e);
+      Alert.alert('Error', 'Failed to open document');
+    }
+  };
 
   useEffect(() => {
     const fetchEmployee = async () => {
@@ -23,6 +74,11 @@ export default function EmployeeDetails() {
       try {
         const employeeData = await EmployeeService.fetchEmployeeById(id);
         setEmployee(employeeData);
+        
+        // Fetch documents for this employee
+        if (employeeData) {
+          await fetchEmployeeDocuments(employeeData.id);
+        }
       } catch (error) {
         console.error('Failed to fetch employee:', error);
       } finally {
@@ -32,6 +88,21 @@ export default function EmployeeDetails() {
 
     fetchEmployee();
   }, [id]);
+console.log("admin employee id:" ,employee?.id);
+  const fetchEmployeeDocuments = async (employeeId: string) => {
+    setDocumentsLoading(true);
+    try {
+      const response = await DocumentService.getDocuments(employeeId);
+      if (response.success && response.documents) {
+        // DocumentService.getDocuments is global now; keep employee-details scoped to this employee.
+        setDocuments(response.documents.filter((doc) => doc.employee_id === employeeId));
+      }
+    } catch (error) {
+      console.error('Failed to fetch documents:', error);
+    } finally {
+      setDocumentsLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -90,6 +161,39 @@ export default function EmployeeDetails() {
                 {new Date(employee.created_at).toLocaleDateString()}
               </Text>
             </View>
+          </View>
+          
+          {/* Documents Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Documents</Text>
+            {documentsLoading ? (
+              <View style={styles.documentsLoadingContainer}>
+                <ActivityIndicator size="small" color="#2563eb" />
+                <Text style={styles.documentsLoadingText}>Loading documents...</Text>
+              </View>
+            ) : documents.length > 0 ? (
+              <View style={styles.documentsList}>
+                {documents.map((doc) => (
+                  <TouchableOpacity
+                    key={doc.id}
+                    style={styles.documentItem}
+                    onPress={() => handleViewEmployeeDocument(doc)}
+                  >
+                    <View style={styles.documentInfo}>
+                      <Text style={styles.documentName}>{doc.file_name}</Text>
+                      <Text style={styles.documentDate}>
+                        {new Date(doc.created_at).toLocaleDateString()}
+                      </Text>
+                    </View>
+                    <Text style={styles.documentArrow}>›</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.emptyDocuments}>
+                <Text style={styles.emptyText}>No documents found</Text>
+              </View>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -159,5 +263,64 @@ const styles = StyleSheet.create({
     color: '#111111',
     flex: 2,
     textAlign: 'right',
+  },
+  section: {
+    marginTop: 24,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#111111',
+    marginBottom: 16,
+  },
+  documentsList: {
+    gap: 8,
+  },
+  documentItem: {
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  documentInfo: {
+    flex: 1,
+  },
+  documentName: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#111111',
+    marginBottom: 2,
+  },
+  documentDate: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  documentArrow: {
+    fontSize: 20,
+    color: '#9ca3af',
+    fontWeight: '300',
+  },
+  emptyDocuments: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#6b7280',
+  },
+  documentsLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    gap: 8,
+  },
+  documentsLoadingText: {
+    fontSize: 14,
+    color: '#6b7280',
   },
 });

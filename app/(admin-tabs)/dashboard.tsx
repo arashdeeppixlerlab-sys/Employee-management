@@ -17,6 +17,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../src/services/supabase/supabaseClient';
+import AuthGuard from '../../src/components/AuthGuard';
 
 const { width } = Dimensions.get('window');
 
@@ -76,7 +77,7 @@ export default function AdminDashboard() {
       // Fetch recent activity
       const { data: recentDocs } = await supabase
         .from('documents')
-        .select('name, created_at, user_id')
+        .select('name, created_at, employee_id')
         .order('created_at', { ascending: false })
         .limit(3);
 
@@ -153,7 +154,7 @@ export default function AdminDashboard() {
       subtitle: 'Add new document',
       icon: 'cloud-upload-outline',
       color: '#10b981',
-      onPress: () => router.push('/(admin-tabs)/documents'),
+      onPress: () => router.push('/(admin-tabs)/admin-documents'),
     },
     {
       title: 'View Reports',
@@ -183,8 +184,9 @@ export default function AdminDashboard() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+    <AuthGuard requiredRole="admin">
+      <SafeAreaView style={styles.safeArea}>
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Welcome Header */}
         <View style={styles.welcomeHeader}>
           <Text style={styles.welcomeTitle}>Welcome back, Admin</Text>
@@ -317,9 +319,10 @@ export default function AdminDashboard() {
           </Card>
         </View>
 
-        <View style={styles.footer} />
-      </ScrollView>
-    </SafeAreaView>
+          <View style={styles.footer} />
+        </ScrollView>
+      </SafeAreaView>
+    </AuthGuard>
   );
 }
 

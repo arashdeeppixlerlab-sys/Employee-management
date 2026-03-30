@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Platform } from 'react-native';
 import {
   View,
@@ -6,6 +6,7 @@ import {
   StyleSheet,
   SafeAreaView,
   FlatList,
+  TouchableOpacity,
   Alert,
   Linking,
   Dimensions,
@@ -23,6 +24,7 @@ import { Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useDocuments } from '../../src/hooks/useDocuments';
 import AuthGuard from '../../src/components/AuthGuard';
+import { supabase } from '../../src/services/supabase/supabaseClient';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -50,22 +52,98 @@ export default function DocumentsTabScreen() {
     fetchDocuments();
   }, [fetchDocuments]);
 
+  const resolveDocumentOpenUrl = useCallback(
+    async (document: any): Promise<string | null> => {
+      const bucket = 'documents';
+      const fileUrl: string | undefined = document?.file_url;
+      const legacyFilePath: string | undefined =
+        document?.file_path || document?.filePath || document?.path;
+
+      console.log('[OPEN_DEBUG] Document clicked:', {
+        id: document?.id,
+        file_name: document?.file_name,
+        file_url: fileUrl,
+        legacyFilePath,
+      });
+
+      // 1) If we already have an http(s) URL, prefer it (but still try signed URL if it's Supabase public).
+      if (typeof fileUrl === 'string' && fileUrl.length > 0) {
+        const isHttp = fileUrl.startsWith('http://') || fileUrl.startsWith('https://');
+        if (isHttp) {
+          // Try to convert public URL -> object path -> signed URL (works for both public/private).
+          const publicMarker = `/storage/v1/object/public/${bucket}/`;
+          const idx = fileUrl.indexOf(publicMarker);
+          if (idx !== -1) {
+            const objectPath = fileUrl.substring(idx + publicMarker.length);
+            if (objectPath) {
+              const { data: signedData, error: signedError } =
+                await supabase.storage.from(bucket).createSignedUrl(objectPath, 60 * 60);
+
+              if (!signedError && signedData?.signedUrl) {
+                console.log('[OPEN_DEBUG] Using signedUrl from public URL:', signedData.signedUrl);
+                return signedData.signedUrl;
+              }
+
+              console.log('[OPEN_DEBUG] Signed URL creation failed, fallback:', {
+                message: signedError?.message,
+              });
+            }
+          }
+
+          console.log('[OPEN_DEBUG] Opening direct URL:', fileUrl);
+          return fileUrl;
+        }
+
+        // 2) If file_url isn't http(s), it might actually be an object path.
+        const objectPath =
+          fileUrl.startsWith(`${bucket}/`) ? fileUrl.slice(bucket.length + 1) : fileUrl;
+        if (objectPath) {
+          const { data: signedData, error: signedError } =
+            await supabase.storage.from(bucket).createSignedUrl(objectPath, 60 * 60);
+          if (!signedError && signedData?.signedUrl) {
+            console.log('[OPEN_DEBUG] Using signedUrl from objectPath:', signedData.signedUrl);
+            return signedData.signedUrl;
+          }
+          console.log('[OPEN_DEBUG] Signed URL failed from objectPath, fallback to file_url:', {
+            message: signedError?.message,
+          });
+        }
+      }
+
+      // 3) Legacy fallback: if DB stored file_path for older uploads.
+      if (typeof legacyFilePath === 'string' && legacyFilePath.length > 0) {
+        const { data: signedData, error: signedError } =
+          await supabase.storage.from(bucket).createSignedUrl(legacyFilePath, 60 * 60);
+        if (!signedError && signedData?.signedUrl) {
+          console.log('[OPEN_DEBUG] Using signedUrl from legacyFilePath:', signedData.signedUrl);
+          return signedData.signedUrl;
+        }
+        console.log('[OPEN_DEBUG] Signed URL failed from legacyFilePath:', {
+          message: signedError?.message,
+        });
+      }
+
+      return null;
+    },
+    [],
+  );
+
   const handleViewDocument = async (document: any) => {
     try {
       console.log('[VIEW_DEBUG] Viewing document:', document.file_name);
-      
-      // Use file_url directly (bucket is public)
-      const documentUrl = document.file_url;
-      
+
+      const documentUrl = await resolveDocumentOpenUrl(document);
+
       if (!documentUrl) {
+        console.log('[VIEW_DEBUG] No documentUrl resolved for:', document);
         Alert.alert('Error', 'Document URL not available');
         return;
       }
 
       setLoadingPreview(true);
-      setSelectedDocument(document);
+      setSelectedDocument({ ...document, file_url: documentUrl });
 
-      const fileName = document.file_name.toLowerCase();
+      const fileName = (document.file_name || document.name || '').toLowerCase();
       
       // Check file type and open appropriate viewer
       if (fileName.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/)) {
@@ -78,12 +156,16 @@ export default function DocumentsTabScreen() {
         // Other files - show open dialog
         Alert.alert(
           'Open Document',
-          `Would you like to open ${document.file_name}?`,
+          `Would you like to open ${document.file_name || document.name || 'this document'}?`,
           [
             { text: 'Cancel', style: 'cancel' },
             {
               text: 'Open',
-              onPress: () => Linking.openURL(documentUrl),
+              onPress: () =>
+                Linking.openURL(documentUrl).catch((e) => {
+                  console.log('[VIEW_DEBUG] openURL error:', e);
+                  Alert.alert('Error', 'Failed to open document');
+                }),
             },
           ]
         );
@@ -238,14 +320,20 @@ export default function DocumentsTabScreen() {
               />
             </View>
             
-            <View style={styles.documentDetails}>
+            <TouchableOpacity
+              style={styles.documentDetails}
+              activeOpacity={0.8}
+              onPress={() =>
+                multiSelectMode ? toggleSelection(item.id) : handleViewDocument(item)
+              }
+            >
               <Text style={styles.fileName} numberOfLines={2}>
                 {item.file_name}
               </Text>
               <Text style={styles.uploadDate}>
                 Uploaded: {formatDate(item.created_at)}
               </Text>
-            </View>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.actions}>

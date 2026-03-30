@@ -13,6 +13,7 @@ import {
   Button,
   IconButton,
   List,
+  TextInput,
 } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -21,7 +22,191 @@ import AuthGuard from '../../src/components/AuthGuard';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { profile } = useAuth();
+  const { user, profile: authProfile } = useAuth();
+  const [displayProfile, setDisplayProfile] = React.useState<any>(authProfile);
+  const [editMode, setEditMode] = React.useState(false);
+
+  type EditableProfile = {
+    name?: string | null;
+    email?: string | null;
+    bio?: string | null;
+    education?: string | null;
+    age?: number | string | null;
+    address?: string | null;
+  };
+
+  const extractEditableFields = (p: any): EditableProfile => ({
+    name: (p?.name ?? '') as string,
+    email: (p?.email ?? '') as string,
+    bio: (p?.bio ?? '') as string,
+    education: (p?.education ?? '') as string,
+    age: (p?.age ?? '') as number | string,
+    address: (p?.address ?? '') as string,
+  });
+
+  const [form, setForm] = React.useState(() => ({
+    name: '',
+    email: '',
+    bio: '',
+    education: '',
+    age: '',
+    address: '',
+  }));
+  const [initialForm, setInitialForm] = React.useState(() => ({
+    name: '',
+    email: '',
+    bio: '',
+    education: '',
+    age: '',
+    address: '',
+  }));
+
+  React.useEffect(() => {
+    setDisplayProfile(authProfile);
+    if (!editMode) {
+      const f = extractEditableFields(authProfile);
+      setForm({
+        name: (f.name ?? '').toString(),
+        email: (f.email ?? '').toString(),
+        bio: (f.bio ?? '').toString(),
+        education: (f.education ?? '').toString(),
+        age: f.age === null || f.age === undefined ? '' : f.age.toString(),
+        address: (f.address ?? '').toString(),
+      });
+      setInitialForm({
+        name: (f.name ?? '').toString(),
+        email: (f.email ?? '').toString(),
+        bio: (f.bio ?? '').toString(),
+        education: (f.education ?? '').toString(),
+        age: f.age === null || f.age === undefined ? '' : f.age.toString(),
+        address: (f.address ?? '').toString(),
+      });
+    }
+  }, [authProfile, editMode]);
+
+  const handleEditPress = () => {
+    const f = initialForm;
+    setForm({ ...f });
+    setEditMode(true);
+  };
+
+  const handleCancelEdit = () => {
+    setForm({ ...initialForm });
+    setEditMode(false);
+  };
+
+  const handleSaveProfile = async () => {
+    const emailTrimmed = (form.email ?? '').trim();
+    if (!emailTrimmed) {
+      Alert.alert('Validation', 'Email is required');
+      return;
+    }
+    
+    const nameTrimmed = (form.name ?? '').trim();
+    if (!nameTrimmed) {
+      Alert.alert('Validation', 'Name is required');
+      return;
+    }
+
+    const ageTrimmed = (form.age ?? '').toString().trim();
+    const ageValue =
+      ageTrimmed.length === 0 ? null : Number(ageTrimmed);
+
+    if (ageTrimmed.length > 0 && !Number.isFinite(ageValue)) {
+      Alert.alert('Validation', 'Age must be a valid number');
+      return;
+    }
+
+    // Only update fields that exist in the basic schema
+    const payload = {
+      email: emailTrimmed,
+      name: nameTrimmed,
+      bio: (form.bio ?? '').trim().length === 0 ? null : form.bio.trim(),
+      education:
+        (form.education ?? '').trim().length === 0 ? null : form.education.trim(),
+      age: ageValue,
+      address: (form.address ?? '').trim().length === 0 ? null : form.address.trim(),
+    };
+
+    const updateWithMissingColumnFallback = async (
+      userId: string,
+      updatePayload: any,
+    ) => {
+      let remainingPayload = { ...updatePayload };
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const { error } = await supabase
+          .from('profiles')
+          .update(remainingPayload)
+          .eq('id', userId);
+
+        if (!error) {
+          return { success: true as const, usedPayload: remainingPayload };
+        }
+
+        const message = error?.message || '';
+        // PostgREST: Could not find the 'address' column of 'profiles' in the schema cache
+        const match = message.match(/Could not find the '([^']+)' column/);
+        if (!match?.[1]) {
+          return { success: false as const, error };
+        }
+
+        const missingColumn = match[1];
+        if (!Object.prototype.hasOwnProperty.call(remainingPayload, missingColumn)) {
+          return { success: false as const, error };
+        }
+
+        console.log('[PROFILE_SAVE_DEBUG] Removing missing column from payload:', missingColumn);
+        // Remove missing column and retry
+        const { [missingColumn]: _, ...rest } = remainingPayload;
+        remainingPayload = rest;
+      }
+
+      return { success: false as const, error: null };
+    };
+
+    try {
+      const userId = user?.id as string | undefined;
+      if (!userId) {
+        Alert.alert('Error', 'User not authenticated');
+        return;
+      }
+
+      const result = await updateWithMissingColumnFallback(userId, payload);
+      if (!result.success) {
+        const message =
+          result.error?.message || 'Failed to save profile';
+        console.error('Profile update error:', result.error);
+        Alert.alert('Error', message);
+        return;
+      }
+
+      Alert.alert('Success', 'Profile updated successfully');
+      setEditMode(false);
+      const usedPayload = result.usedPayload || payload;
+      const nextInitialForm = {
+        name: usedPayload.name ?? '',
+        email: usedPayload.email ?? '',
+        bio: usedPayload.bio ?? '',
+        education: usedPayload.education ?? '',
+        age: usedPayload.age === null ? '' : usedPayload.age?.toString?.() || '',
+        address: usedPayload.address ?? '',
+      };
+      setInitialForm(nextInitialForm);
+      setForm({ ...nextInitialForm });
+      setDisplayProfile((prev: any) => ({
+        ...prev,
+        name: usedPayload.name,
+        email: usedPayload.email,
+        bio: usedPayload.bio,
+        education: usedPayload.education,
+        age: usedPayload.age,
+        address: usedPayload.address,
+      }));
+    } catch (e) {
+      console.error('Profile save exception:', e);
+      Alert.alert('Error', 'Failed to save profile');
+    }
+  };
 
   const handleSignOut = async () => {
     // Platform-specific confirmation
@@ -67,16 +252,16 @@ export default function ProfileScreen() {
                 <View style={styles.profileHeader}>
                   <View style={styles.avatar}>
                     <Text style={styles.avatarText}>
-                      {(profile?.email?.[0] || 'U').toUpperCase()}
+                      {(displayProfile?.email?.[0] || 'U').toUpperCase()}
                     </Text>
                   </View>
                   <View style={styles.profileInfo}>
                     <Text style={styles.userName}>
-                      {profile?.email?.split('@')[0] || 'User'}
+                      {displayProfile?.email?.split('@')[0] || 'User'}
                     </Text>
-                    <Text style={styles.userEmail}>{profile?.email}</Text>
+                    <Text style={styles.userEmail}>{displayProfile?.email}</Text>
                     <Text style={styles.userRole}>
-                      Role: {profile?.role || 'Unknown'}
+                      Role: {displayProfile?.role || 'Unknown'}
                     </Text>
                   </View>
                 </View>
@@ -90,29 +275,116 @@ export default function ProfileScreen() {
                 
                 <List.Item
                   title="Email Address"
-                  description={profile?.email || 'Not available'}
+                  description={displayProfile?.email || 'Not available'}
                   left={(props) => <List.Icon {...props} icon="email" />}
                 />
                 
                 <List.Item
                   title="User Role"
-                  description={profile?.role || 'Unknown'}
+                  description={displayProfile?.role || 'Unknown'}
                   left={(props) => <List.Icon {...props} icon="account-badge" />}
                 />
                 
                 <List.Item
                   title="Member Since"
-                  description={profile?.created_at ? formatDate(profile.created_at) : 'Unknown'}
+                  description={
+                    displayProfile?.created_at ? formatDate(displayProfile.created_at) : 'Unknown'
+                  }
                   left={(props) => <List.Icon {...props} icon="calendar" />}
                 />
                 
                 <List.Item
                   title="Last Updated"
-                  description={profile?.updated_at ? formatDate(profile.updated_at) : 'Unknown'}
+                  description={
+                    displayProfile?.updated_at ? formatDate(displayProfile.updated_at) : 'Unknown'
+                  }
                   left={(props) => <List.Icon {...props} icon="update" />}
                 />
               </Card.Content>
             </Card>
+
+            {/* Profile Edit */}
+            {editMode ? (
+              <Card style={styles.editCard}>
+                <Card.Content>
+                  <Text style={styles.sectionTitle}>Edit Profile</Text>
+
+                  <TextInput
+                    label="Email"
+                    value={form.email || ''}
+                    onChangeText={(t) => setForm((prev) => ({ ...prev, email: t }))}
+                    mode="outlined"
+                    style={styles.textInput}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                  />
+                  <TextInput
+                    label="Name"
+                    value={form.name}
+                    onChangeText={(t) => setForm((prev) => ({ ...prev, name: t }))}
+                    mode="outlined"
+                    style={styles.textInput}
+                  />
+                  <TextInput
+                    label="Bio"
+                    value={form.bio}
+                    onChangeText={(t) => setForm((prev) => ({ ...prev, bio: t }))}
+                    mode="outlined"
+                    style={styles.textInput}
+                    multiline
+                  />
+                  <TextInput
+                    label="Education"
+                    value={form.education}
+                    onChangeText={(t) => setForm((prev) => ({ ...prev, education: t }))}
+                    mode="outlined"
+                    style={styles.textInput}
+                    multiline
+                  />
+                  <TextInput
+                    label="Age"
+                    value={form.age}
+                    onChangeText={(t) => setForm((prev) => ({ ...prev, age: t }))}
+                    mode="outlined"
+                    style={styles.textInput}
+                    keyboardType="numeric"
+                  />
+                  <TextInput
+                    label="Address"
+                    value={form.address}
+                    onChangeText={(t) => setForm((prev) => ({ ...prev, address: t }))}
+                    mode="outlined"
+                    style={styles.textInput}
+                    multiline
+                  />
+
+                  <View style={styles.editActions}>
+                    <Button
+                      mode="outlined"
+                      onPress={handleCancelEdit}
+                      style={styles.editButton}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      mode="contained"
+                      onPress={handleSaveProfile}
+                      style={styles.editButton}
+                    >
+                      Save
+                    </Button>
+                  </View>
+                </Card.Content>
+              </Card>
+            ) : (
+              <Button
+                mode="contained"
+                onPress={handleEditPress}
+                style={styles.editProfileButton}
+              >
+                Edit Profile
+              </Button>
+            )}
 
             {/* Quick Actions */}
             <Card style={styles.actionsCard}>
@@ -232,5 +504,25 @@ const styles = StyleSheet.create({
   signOutButton: {
     borderColor: '#ef4444',
     marginTop: 8,
+  },
+  editProfileButton: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  editCard: {
+    elevation: 1,
+    marginTop: 8,
+  },
+  textInput: {
+    marginBottom: 12,
+  },
+  editActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    marginTop: 8,
+  },
+  editButton: {
+    minWidth: 120,
   },
 });

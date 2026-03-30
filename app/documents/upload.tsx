@@ -89,8 +89,19 @@ console.log('SESSION:', session);
         setFileName('');
 
         // Navigate after a short delay to show success message
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        const nextRoute =
+          profileData?.role === 'admin'
+            ? '/(admin-tabs)/admin-documents'
+            : '/(tabs)/documents';
+
         setTimeout(() => {
-          router.replace('/(tabs)/documents');
+          router.replace(nextRoute);
         }, 2000);
       } else {
         console.log('UPLOAD FAILED:', response.error);

@@ -23,6 +23,7 @@ import { Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useDocuments } from '../../src/hooks/useDocuments';
 import AuthGuard from '../../src/components/AuthGuard';
+import { supabase } from '../../src/services/supabase/supabaseClient';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -40,22 +41,86 @@ export default function DocumentsScreen() {
     fetchDocuments,
   } = useDocuments();
 
+  const resolveDocumentOpenUrl = async (document: any): Promise<string | null> => {
+    const bucket = 'documents';
+    const fileUrl: string | undefined = document?.file_url;
+    const legacyFilePath: string | undefined =
+      document?.file_path || document?.filePath || document?.path;
+
+    console.log('[OPEN_DEBUG][LEGACY] Document clicked:', {
+      id: document?.id,
+      file_name: document?.file_name,
+      signed_url: document?.signed_url,
+      file_url: fileUrl,
+      legacyFilePath,
+    });
+
+    if (typeof fileUrl === 'string' && fileUrl.length > 0) {
+      const isHttp = fileUrl.startsWith('http://') || fileUrl.startsWith('https://');
+      if (isHttp) {
+        const publicMarker = `/storage/v1/object/public/${bucket}/`;
+        const idx = fileUrl.indexOf(publicMarker);
+        if (idx !== -1) {
+          const objectPath = fileUrl.substring(idx + publicMarker.length);
+          if (objectPath) {
+            const { data: signedData, error: signedError } =
+              await supabase.storage.from(bucket).createSignedUrl(objectPath, 60 * 60);
+            if (!signedError && signedData?.signedUrl) {
+              console.log('[OPEN_DEBUG][LEGACY] Using signedUrl:', signedData.signedUrl);
+              return signedData.signedUrl;
+            }
+            console.log('[OPEN_DEBUG][LEGACY] Signed URL failed, fallback:', {
+              message: signedError?.message,
+            });
+          }
+        }
+
+        console.log('[OPEN_DEBUG][LEGACY] Opening direct URL:', fileUrl);
+        return fileUrl;
+      }
+
+      const objectPath =
+        fileUrl.startsWith(`${bucket}/`) ? fileUrl.slice(bucket.length + 1) : fileUrl;
+      if (objectPath) {
+        const { data: signedData, error: signedError } =
+          await supabase.storage.from(bucket).createSignedUrl(objectPath, 60 * 60);
+        if (!signedError && signedData?.signedUrl) {
+          console.log('[OPEN_DEBUG][LEGACY] Using signedUrl from objectPath:', signedData.signedUrl);
+          return signedData.signedUrl;
+        }
+      }
+    }
+
+    if (typeof legacyFilePath === 'string' && legacyFilePath.length > 0) {
+      const { data: signedData, error: signedError } =
+        await supabase.storage.from(bucket).createSignedUrl(legacyFilePath, 60 * 60);
+      if (!signedError && signedData?.signedUrl) {
+        console.log('[OPEN_DEBUG][LEGACY] Using signedUrl from legacyFilePath:', signedData.signedUrl);
+        return signedData.signedUrl;
+      }
+    }
+
+    return null;
+  };
+
   const handleViewDocument = async (document: any) => {
     try {
-      if (!document.signed_url) {
+      const resolvedUrl = await resolveDocumentOpenUrl(document);
+      if (!resolvedUrl) {
+        console.log('[VIEW_DEBUG][LEGACY] No resolvable URL for doc:', document);
         Alert.alert('Error', 'Document URL not available');
         return;
       }
 
-      const fileName = document.file_name.toLowerCase();
+      const fileName = (document.file_name || document.name || '').toLowerCase();
       
       // Check if it's an image
       if (fileName.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/)) {
-        setSelectedDocument(document);
+        setSelectedDocument({ ...document, file_url: resolvedUrl, signed_url: resolvedUrl });
         setImageModalVisible(true);
       } else if (fileName.match(/\.pdf$/)) {
         // For PDFs, try to open in browser
-        await Linking.openURL(document.signed_url);
+        await Linking.openURL(resolvedUrl);
       } else {
         // For other file types, show download/open option
         Alert.alert(
@@ -65,12 +130,17 @@ export default function DocumentsScreen() {
             { text: 'Cancel', style: 'cancel' },
             {
               text: 'Open',
-              onPress: () => Linking.openURL(document.signed_url),
+              onPress: () =>
+                Linking.openURL(resolvedUrl).catch((e) => {
+                  console.log('[VIEW_DEBUG][LEGACY] openURL error:', e);
+                  Alert.alert('Error', 'Failed to open document');
+                }),
             },
           ]
         );
       }
     } catch (err) {
+      console.log('[VIEW_DEBUG][LEGACY] View error:', err);
       Alert.alert('Error', 'Failed to open document');
     }
   };

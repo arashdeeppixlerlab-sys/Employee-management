@@ -66,6 +66,7 @@ export const useDocuments = () => {
 
     try {
       const response = await DocumentService.getDocuments(profile.id);
+      console.log("fetching ID",profile.id);
 
       if (response.success && response.documents) {
         console.log('[FETCH_DEBUG] FETCHED DOCUMENTS:', response.documents.length);

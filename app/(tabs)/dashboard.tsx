@@ -28,7 +28,7 @@ export default function DashboardScreen() {
   };
 
   return (
-    <AuthGuard>
+    <AuthGuard requiredRole="employee">
       <SafeAreaView style={styles.safeArea}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
           <View style={styles.container}>

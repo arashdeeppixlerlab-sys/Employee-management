@@ -27,7 +27,7 @@ export default function AuthGuard({ children, requiredRole }: AuthGuardProps) {
           return;
         }
         if (requiredRole === 'employee' && !isEmployee) {
-          router.replace('/(tabs)/dashboard');
+          router.replace(isAdmin ? '/(admin-tabs)/dashboard' : '/(tabs)/dashboard');
           return;
         }
       }
@@ -75,7 +75,9 @@ export default function AuthGuard({ children, requiredRole }: AuthGuardProps) {
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#2563eb" />
-            <Text style={styles.loadingText}>Redirecting to admin dashboard...</Text>
+            <Text style={styles.loadingText}>
+              Redirecting to {isAdmin ? 'admin' : 'employee'} dashboard...
+            </Text>
           </View>
         </SafeAreaView>
       );

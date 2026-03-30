@@ -1,7 +1,4 @@
 import { supabase } from './supabase/supabaseClient';
-import { Buffer } from 'buffer';
-
-global.Buffer = global.Buffer || Buffer;
 
 export interface UploadResponse {
   success: boolean;
@@ -15,7 +12,7 @@ export interface Document {
   file_name: string;
   file_url: string;
   created_at: string;
-  signed_url?: string; // Runtime signed URL for viewing
+  signed_url?: string;
 }
 
 export interface DocumentListResponse {
@@ -27,84 +24,80 @@ export interface DocumentListResponse {
 export const DocumentService = {
   async uploadDocument(userId: string, file: any, fileName: string): Promise<UploadResponse> {
     try {
-      console.log('[UPLOAD_DEBUG] Starting upload:', { userId, fileName, file });
+      console.log('[UPLOAD] Start:', { userId, fileName });
 
-      // Validate file
       if (!file || !file.uri) {
         return { success: false, error: 'No file selected' };
       }
 
-      const fileSize = file.size || 0;
-      const maxSize = 10 * 1024 * 1024; // 10MB
-
-      if (fileSize > maxSize) {
-        return { success: false, error: 'File size exceeds 10MB limit' };
-      }
-
-      // Generate unique filename
-      const fileExt = file.name.split('.').pop();
-      const timestamp = Date.now();
-      const storageFileName = `${timestamp}.${fileExt}`;
+      const fileExt = (file.name || 'file').split('.').pop() || 'bin';
+      const storageFileName = `${Date.now()}.${fileExt}`;
       const storagePath = `documents/${userId}/${storageFileName}`;
 
-      console.log('[UPLOAD_DEBUG] Storage path:', storagePath);
-      console.log('[UPLOAD_DEBUG] File info:', {
-        uri: file.uri,
-        name: file.name,
-        mimeType: file.mimeType,
-        size: fileSize
-      });
+      const contentType =
+        (file.type || file.mimeType || '').toString().trim() ||
+        'application/octet-stream';
 
-      // Convert file to buffer for proper upload
-      const response = await fetch(file.uri);
-      const buffer = await response.arrayBuffer();
+      // Ensure proper file object
+      const isWeb = file.uri?.startsWith('blob:');
 
-      console.log('[UPLOAD_DEBUG] Buffer size:', buffer.byteLength);
+      let uploadData: any;
 
-      // Upload to Supabase Storage
+      if (isWeb) {
+        console.log('[UPLOAD] Using WEB blob upload');
+
+        // Convert blob URL to actual Blob
+        const response = await fetch(file.uri);
+        const blob = await response.blob();
+
+        uploadData = blob;
+      } else {
+        console.log('[UPLOAD] Using RN file upload');
+
+        uploadData = {
+          uri: file.uri,
+          name: file.name,
+          type: contentType,
+        };
+      }
+
       const { data, error } = await supabase.storage
         .from('documents')
-        .upload(storagePath, buffer, {
-          contentType: file.mimeType || 'application/octet-stream',
-          upsert: false
+        .upload(storagePath, uploadData, {
+          contentType,
         });
-
       if (error) {
-        console.log('[UPLOAD_DEBUG] Storage error:', error);
+        console.log('[UPLOAD ERROR]:', error);
         return { success: false, error: error.message };
       }
 
-      console.log('[UPLOAD_DEBUG] Storage upload success:', data);
-
       // Get public URL
-      const { data: { publicUrl } } = supabase.storage
+      const { data: urlData } = supabase.storage
         .from('documents')
         .getPublicUrl(storagePath);
 
-      console.log('[UPLOAD_DEBUG] Public URL:', publicUrl);
+      const publicUrl = urlData?.publicUrl;
 
-      // Insert metadata into database
+      // Save metadata
       const { data: insertData, error: dbError } = await supabase
         .from('documents')
         .insert({
           employee_id: userId,
-          file_name: fileName,
+          file_name: fileName || uploadData.name,
           file_url: publicUrl,
         })
         .select();
 
       if (dbError) {
-        console.log('[UPLOAD_DEBUG] DB error:', dbError);
-        // Clean up uploaded file if DB insert fails
         await supabase.storage.from('documents').remove([storagePath]);
-        return { success: false, error: `Failed to save document metadata: ${dbError.message}` };
+        return { success: false, error: dbError.message };
       }
 
-      console.log('[UPLOAD_DEBUG] DB insert success:', insertData);
+      console.log('[UPLOAD SUCCESS]');
       return { success: true, data: insertData };
 
     } catch (error) {
-      console.log('[UPLOAD_DEBUG] Upload exception:', error);
+      console.log('[UPLOAD EXCEPTION]:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Upload failed',
@@ -114,19 +107,17 @@ export const DocumentService = {
 
   async getDocuments(userId: string): Promise<DocumentListResponse> {
     try {
-      console.log('[FETCH_DEBUG] Fetching for user:', userId);
+      console.log('[FETCH] user:', userId);
 
       const { data, error } = await supabase
         .from('documents')
         .select('*')
-        .eq('employee_id', userId);
+        .order('created_at', { ascending: false });
 
       if (error) {
-        console.log('[FETCH_DEBUG] ERROR:', error);
+        console.log('[FETCH ERROR]:', error);
         return { success: false, error: error.message };
       }
-
-      console.log('[FETCH_DEBUG] RESULT COUNT:', data?.length);
 
       return {
         success: true,
@@ -143,67 +134,54 @@ export const DocumentService = {
 
   async deleteDocument(documentId: string, userId: string) {
     try {
-      console.log('[DELETE_DEBUG] Starting delete for document:', documentId, 'user:', userId);
+      console.log('[DELETE] doc:', documentId);
 
-      // First fetch document to get file info
-      const { data: document, error: fetchError } = await supabase
+      // Determine role so employees can only delete their own documents
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .maybeSingle();
+
+      const isAdmin = profile?.role === 'admin';
+
+      const docQuery = supabase
         .from('documents')
-        .select('file_url')
-        .eq('id', documentId)
-        .eq('employee_id', userId)
-        .single();
+        .select('file_url, employee_id')
+        .eq('id', documentId);
 
-      console.log('[DELETE_DEBUG] Fetched document:', { document, fetchError });
+      const { data: document, error: fetchError } = !isAdmin
+        ? await docQuery.eq('employee_id', userId).maybeSingle()
+        : await docQuery.maybeSingle();
 
       if (fetchError || !document) {
-        console.log('[DELETE_DEBUG] Document not found:', fetchError);
         return { success: false, error: 'Not found or no access' };
       }
 
-      // Extract file name and construct storage path
-      if (!document.file_url) {
-        console.log('[DELETE_DEBUG] No file_url found');
+      const fileName = document.file_url?.split('/').pop();
+      if (!fileName) {
         return { success: false, error: 'File URL not found' };
       }
 
-      const urlParts = document.file_url.split('/');
-      const fileName = urlParts[urlParts.length - 1];
-      const storagePath = `documents/${userId}/${fileName}`;
+      // Storage path is based on the document owner (employee_id), not the requester id
+      const storagePath = `documents/${document.employee_id}/${fileName}`;
 
-      console.log('[DELETE_DEBUG] Storage path:', storagePath);
+      // Delete from storage
+      await supabase.storage.from('documents').remove([storagePath]);
 
-      // Delete from storage first
-      const { error: storageError } = await supabase.storage
-        .from('documents')
-        .remove([storagePath]);
-
-      console.log('[DELETE_DEBUG] Storage delete result:', { storageError });
-
-      if (storageError) {
-        console.log('[DELETE_DEBUG] Storage delete failed:', storageError);
-        // Continue with DB delete even if storage fails (cleanup)
-        console.log('[DELETE_DEBUG] Continuing with DB delete for cleanup');
-      }
-
-      // Delete from database
-      const { error: dbError ,count} = await supabase
-        .from('documents')
-        .delete()
-        .eq('id', documentId)
-        .eq('employee_id', userId)
-        .select();
-
-      console.log('[DELETE_DEBUG] DB delete result:', { dbError, count });
+      // Delete from DB
+      const deleteQuery = supabase.from('documents').delete().eq('id', documentId);
+      const { error: dbError } = !isAdmin
+        ? await deleteQuery.eq('employee_id', userId)
+        : await deleteQuery;
 
       if (dbError) {
-        console.log('[DELETE_DEBUG] DB delete failed:', dbError);
         return { success: false, error: dbError.message };
       }
 
-      console.log('[DELETE_DEBUG] Delete successful');
       return { success: true };
+
     } catch (error) {
-      console.log('[DELETE_DEBUG] Delete exception:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Delete failed',

@@ -46,7 +46,7 @@ export default function AdminTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="documents"
+        name="admin-documents"
         options={{
           title: 'Documents',
           tabBarIcon: ({ color, size }) => (

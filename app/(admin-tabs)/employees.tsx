@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { EmployeeService, Employee } from '../../src/services/EmployeeService';
+import AuthGuard from '../../src/components/AuthGuard';
 
 export default function AdminEmployees() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -62,35 +63,39 @@ export default function AdminEmployees() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2563eb" />
-          <Text style={styles.loadingText}>Loading employees...</Text>
-        </View>
-      </SafeAreaView>
+      <AuthGuard requiredRole="admin">
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#2563eb" />
+            <Text style={styles.loadingText}>Loading employees...</Text>
+          </View>
+        </SafeAreaView>
+      </AuthGuard>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <Text style={styles.title}>Employees</Text>
-        <FlatList
-          data={employees}
-          renderItem={renderEmployeeItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContainer}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No employees found</Text>
-            </View>
-          }
-        />
-      </View>
-    </SafeAreaView>
+    <AuthGuard requiredRole="admin">
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <Text style={styles.title}>Employees</Text>
+          <FlatList
+            data={employees}
+            renderItem={renderEmployeeItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContainer}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+            }
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No employees found</Text>
+              </View>
+            }
+          />
+        </View>
+      </SafeAreaView>
+    </AuthGuard>
   );
 }
 
