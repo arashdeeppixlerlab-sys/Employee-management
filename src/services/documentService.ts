@@ -20,7 +20,7 @@ export interface DocumentListResponse {
   success: boolean;
   documents?: Document[];
   error?: string;
-}console.log("FILE DEBUG:", File);
+}
 
 export const DocumentService = {
   
