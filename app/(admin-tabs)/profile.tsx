@@ -9,17 +9,21 @@ import {
   TouchableOpacity,
   Dimensions,
   Alert,
-  Platform
+  Platform,
+  Image,
 } from 'react-native';
 import { Button, Card, Avatar, Divider, TextInput } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../src/services/supabase/supabaseClient';
 import AuthGuard from '../../src/components/AuthGuard';
+import { useAuth } from '../../src/hooks/useAuth';
+import { ProfilePhotoService } from '../../src/services/ProfilePhotoService';
 
 const { width } = Dimensions.get('window');
 
 export default function AdminProfile() {
+  const { refreshProfile } = useAuth();
   const [userId, setUserId] = useState<string | null>(null);
   const [profile, setProfile] = useState<{
     id?: string;
@@ -28,12 +32,14 @@ export default function AdminProfile() {
     education?: string | null;
     age?: number | string | null;
     address?: string | null;
+    profile_photo_url?: string | null;
     email: string;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [employeeCount, setEmployeeCount] = useState(0);
   const [documentCount, setDocumentCount] = useState(0);
   const [editMode, setEditMode] = useState(false);
+  const [photoLoading, setPhotoLoading] = useState(false);
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -62,7 +68,7 @@ export default function AdminProfile() {
 
         const { data } = await supabase
           .from('profiles')
-          .select('id, name, email, bio, education, age, address')
+          .select('id, name, email, bio, education, age, address, profile_photo_url')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -203,6 +209,9 @@ export default function AdminProfile() {
         return;
       }
 
+      // Refresh global auth profile state so other screens see updated data
+      await refreshProfile();
+
       Alert.alert('Success', 'Profile updated successfully');
       setEditMode(false);
       const usedPayload = result.usedPayload || payload;
@@ -231,6 +240,52 @@ export default function AdminProfile() {
     } catch (e) {
       console.error('Admin profile save exception:', e);
       Alert.alert('Error', 'Failed to save profile');
+    }
+  };
+
+  const handleUploadPhoto = async () => {
+    if (!userId || photoLoading) return;
+    setPhotoLoading(true);
+    try {
+      const result = await ProfilePhotoService.uploadProfilePhoto(
+        userId,
+        profile?.profile_photo_url,
+      );
+      if (!result.success) {
+        Alert.alert('Error', result.error || 'Failed to upload photo');
+        return;
+      }
+      await refreshProfile();
+      setProfile((prev) => {
+        if (!prev) return prev;
+        return { ...prev, profile_photo_url: result.photoUrl || null };
+      });
+      Alert.alert('Success', 'Profile photo updated');
+    } finally {
+      setPhotoLoading(false);
+    }
+  };
+
+  const handleDeletePhoto = async () => {
+    if (!userId || photoLoading || !profile?.profile_photo_url) return;
+    setPhotoLoading(true);
+    try {
+      const result = await ProfilePhotoService.removeProfilePhoto(
+        userId,
+        profile?.profile_photo_url,
+      );
+      if (!result.success) {
+        Alert.alert('Error', result.error || 'Failed to delete photo');
+        return;
+      }
+      await refreshProfile();
+      setProfile((prev) => {
+        if (!prev) return prev;
+        return { ...prev, profile_photo_url: null };
+      });
+      Alert.alert('Success', 'Profile photo removed');
+    } finally {
+      setPhotoLoading(false);
     }
   };
 
@@ -312,12 +367,16 @@ export default function AdminProfile() {
           {/* Profile Header */}
           <View style={styles.header}>
             <View style={styles.profileHeader}>
-              <Avatar.Text
-                size={80}
-                label={profile?.name?.charAt(0).toUpperCase() || profile?.email?.charAt(0).toUpperCase() || 'A'}
-                style={styles.avatar}
-                labelStyle={styles.avatarLabel}
-              />
+              {profile?.profile_photo_url ? (
+                <Image source={{ uri: profile.profile_photo_url }} style={styles.avatarImage} />
+              ) : (
+                <Avatar.Text
+                  size={80}
+                  label={profile?.name?.charAt(0).toUpperCase() || profile?.email?.charAt(0).toUpperCase() || 'A'}
+                  style={styles.avatar}
+                  labelStyle={styles.avatarLabel}
+                />
+              )}
               <View style={styles.profileInfo}>
                 <Text style={styles.profileName}>
                   {profile?.name || 'Admin User'}
@@ -437,6 +496,27 @@ export default function AdminProfile() {
                   style={styles.textInput}
                   multiline
                 />
+
+                <View style={styles.photoActions}>
+                  <Button
+                    mode="outlined"
+                    onPress={handleUploadPhoto}
+                    loading={photoLoading}
+                    disabled={photoLoading}
+                  >
+                    {profile?.profile_photo_url ? 'Update Photo' : 'Add Photo'}
+                  </Button>
+                  {profile?.profile_photo_url ? (
+                    <Button
+                      mode="text"
+                      onPress={handleDeletePhoto}
+                      textColor="#ef4444"
+                      disabled={photoLoading}
+                    >
+                      Delete Photo
+                    </Button>
+                  ) : null}
+                </View>
 
                 <View style={styles.editActions}>
                   <Button
@@ -558,6 +638,11 @@ const styles = StyleSheet.create({
   avatar: {
     backgroundColor: '#2563eb',
   },
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+  },
   avatarLabel: {
     color: '#ffffff',
     fontSize: 32,
@@ -669,6 +754,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#2563eb',
   },
   textInput: {
+    marginBottom: 12,
+  },
+  photoActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     marginBottom: 12,
   },
   editActions: {

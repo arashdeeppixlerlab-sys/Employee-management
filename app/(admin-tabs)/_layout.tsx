@@ -17,9 +17,9 @@ export default function AdminTabLayout() {
           backgroundColor: '#ffffff',
           borderTopWidth: 1,
           borderTopColor: '#e5e7eb',
-          height: Platform.OS === 'ios' ? 88 + insets.bottom : 64 + insets.bottom,
-          paddingBottom: Platform.OS === 'ios' ? 20 + insets.bottom : 8 + insets.bottom,
-          paddingTop: 8,
+          height: Platform.OS === 'ios' ? 82 + insets.bottom : 56 + insets.bottom,
+          paddingBottom: Platform.OS === 'ios' ? 16 + insets.bottom : 6 + insets.bottom,
+          paddingTop: 4,
         },
         tabBarLabelStyle: {
           fontSize: 12,
@@ -46,7 +46,7 @@ export default function AdminTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="admin-documents"
+        name="documents-admin"
         options={{
           title: 'Documents',
           tabBarIcon: ({ color, size }) => (
@@ -68,6 +68,13 @@ export default function AdminTabLayout() {
         options={{
           href: null,
           headerShown: false // FIX: Hide stack header since screen has custom header
+        }}
+      />
+      <Tabs.Screen
+        name="add-user"
+        options={{
+          href: null,
+          headerShown: false
         }}
       />
     </Tabs>

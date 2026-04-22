@@ -1,22 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  SafeAreaView, 
-  FlatList, 
-  TouchableOpacity, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
+  FlatList,
+  TouchableOpacity,
   ActivityIndicator,
-  RefreshControl
+  RefreshControl,
+  Alert,
+  Image,
+  Platform,
+  StatusBar,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { EmployeeService, Employee } from '../../src/services/EmployeeService';
+import { AdminUserManagementService } from '../../src/services/AdminUserManagementService';
 import AuthGuard from '../../src/components/AuthGuard';
 
 export default function AdminEmployees() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [actionUserId, setActionUserId] = useState<string | null>(null);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const router = useRouter();
 
   const fetchEmployees = async () => {
@@ -44,20 +54,191 @@ export default function AdminEmployees() {
     router.push(`/(admin-tabs)/employee-details?id=${employee.id}`);
   };
 
+  const handleEmployeeCardPress = (employee: Employee) => {
+    if (selectionMode) {
+      toggleSelect(employee.id);
+      return;
+    }
+    handleEmployeePress(employee);
+  };
+
+  const handleEmployeeCardLongPress = (employee: Employee) => {
+    if (!selectionMode) {
+      setSelectionMode(true);
+    }
+    toggleSelect(employee.id);
+  };
+
+  const handleBlockToggle = async (employee: Employee) => {
+    const isBlocked = !!employee.is_blocked;
+    setActionUserId(employee.id);
+    const result = isBlocked
+      ? await AdminUserManagementService.unblockUser(employee.id)
+      : await AdminUserManagementService.blockUser(employee.id);
+    setActionUserId(null);
+
+    if (!result.success) {
+      Alert.alert(isBlocked ? 'Unblock Failed' : 'Block Failed', result.error || 'Please try again.');
+      return;
+    }
+
+    Alert.alert('Success', isBlocked ? 'User unblocked.' : 'User blocked.');
+    fetchEmployees();
+  };
+
+  const handleDeleteUser = (employee: Employee) => {
+    Alert.alert(
+      'Delete User',
+      `Permanently delete ${employee.email}? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setActionUserId(employee.id);
+            const result = await AdminUserManagementService.deleteUser(employee.id);
+            setActionUserId(null);
+
+            if (!result.success) {
+              Alert.alert('Delete Failed', result.error || 'Please try again.');
+              return;
+            }
+
+            Alert.alert('Success', 'User deleted permanently.');
+            setSelectedUserIds((prev) => prev.filter((id) => id !== employee.id));
+            fetchEmployees();
+          },
+        },
+      ]
+    );
+  };
+
+  const toggleSelect = (userId: string) => {
+    setSelectedUserIds((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+    );
+  };
+
+  const clearSelection = () => {
+    setSelectedUserIds([]);
+    setSelectionMode(false);
+  };
+
+  const selectedEmployees = employees.filter((employee) => selectedUserIds.includes(employee.id));
+  const hasBlockedSelected = selectedEmployees.some((employee) => !!employee.is_blocked);
+  const hasUnblockedSelected = selectedEmployees.some((employee) => !employee.is_blocked);
+
+  const handleBulkAction = async (type: 'block' | 'unblock' | 'delete') => {
+    if (!selectedEmployees.length) return;
+
+    const targetUsers =
+      type === 'block'
+        ? selectedEmployees.filter((employee) => !employee.is_blocked)
+        : type === 'unblock'
+          ? selectedEmployees.filter((employee) => !!employee.is_blocked)
+          : selectedEmployees;
+
+    if (!targetUsers.length) {
+      Alert.alert('No matching users', `No users available for ${type}.`);
+      return;
+    }
+
+    setBulkSubmitting(true);
+    let successCount = 0;
+    let failedCount = 0;
+
+    for (const user of targetUsers) {
+      const result =
+        type === 'block'
+          ? await AdminUserManagementService.blockUser(user.id)
+          : type === 'unblock'
+            ? await AdminUserManagementService.unblockUser(user.id)
+            : await AdminUserManagementService.deleteUser(user.id);
+
+      if (result.success) successCount += 1;
+      else failedCount += 1;
+    }
+
+    setBulkSubmitting(false);
+    fetchEmployees();
+    setSelectedUserIds([]);
+    setSelectionMode(false);
+
+    const skippedCount = selectedEmployees.length - targetUsers.length;
+
+    Alert.alert(
+      'Bulk Action Complete',
+      `${successCount} user(s) updated.${failedCount ? ` ${failedCount} failed.` : ''}${skippedCount ? ` ${skippedCount} skipped.` : ''}`
+    );
+  };
+
+  const confirmBulkDelete = () => {
+    Alert.alert(
+      'Delete Selected Users',
+      `Delete ${selectedUserIds.length} selected user(s)? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => handleBulkAction('delete'),
+        },
+      ]
+    );
+  };
+
   const renderEmployeeItem = ({ item }: { item: Employee }) => (
-    <TouchableOpacity 
-      style={styles.employeeCard}
-      onPress={() => handleEmployeePress(item)}
+    <TouchableOpacity
+      style={[styles.employeeCard, selectedUserIds.includes(item.id) && styles.employeeCardSelected]}
+      onPress={() => handleEmployeeCardPress(item)}
+      onLongPress={() => handleEmployeeCardLongPress(item)}
+      activeOpacity={0.8}
     >
+      {selectionMode ? (
+        <View style={[styles.selectButton, selectedUserIds.includes(item.id) && styles.selectButtonActive]}>
+          {selectedUserIds.includes(item.id) && <Text style={styles.selectButtonText}>✓</Text>}
+        </View>
+      ) : (
+        item.profile_photo_url ? (
+          <Image source={{ uri: item.profile_photo_url }} style={styles.avatarImage} />
+        ) : (
+          <View style={styles.avatarCircle}>
+            <Text style={styles.avatarText}>{(item.name || item.email || 'U').charAt(0).toUpperCase()}</Text>
+          </View>
+        )
+      )}
       <View style={styles.employeeInfo}>
-        <Text style={styles.employeeName}>
-          {item.name || item.email}
-        </Text>
+        <Text style={styles.employeeName}>{item.name || item.email}</Text>
         <Text style={styles.employeeEmail}>{item.email}</Text>
+        <Text style={[styles.statusBadge, item.is_blocked ? styles.blockedBadge : styles.activeBadge]}>
+          {item.is_blocked ? 'Blocked' : 'Active'}
+        </Text>
       </View>
-      <View style={styles.arrowContainer}>
-        <Text style={styles.arrow}>›</Text>
-      </View>
+      {selectionMode ? (
+        <Ionicons name="checkmark-circle-outline" size={20} color="#94a3b8" />
+      ) : (
+        <View style={styles.actionsColumn}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.blockButton]}
+            onPress={() => handleBlockToggle(item)}
+            disabled={actionUserId === item.id}
+          >
+            <Text style={styles.actionButtonText}>
+              {actionUserId === item.id ? '...' : item.is_blocked ? 'Unblock' : 'Block'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.deleteButton]}
+            onPress={() => handleDeleteUser(item)}
+            disabled={actionUserId === item.id}
+          >
+            <Text style={styles.actionButtonText}>
+              {actionUserId === item.id ? '...' : 'Delete'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </TouchableOpacity>
   );
 
@@ -78,7 +259,66 @@ export default function AdminEmployees() {
     <AuthGuard requiredRole="admin">
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.container}>
-          <Text style={styles.title}>Employees</Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.title}>Employees</Text>
+            <TouchableOpacity
+              style={styles.multiSelectButton}
+              onPress={() => {
+                if (selectionMode) {
+                  clearSelection();
+                } else {
+                  setSelectionMode(true);
+                }
+              }}
+            >
+              <Text style={styles.multiSelectButtonText}>{selectionMode ? 'Done' : 'Multi Select'}</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.listHeader}>
+            <Text style={styles.listSubtitle}>
+              {selectionMode
+                ? 'Tap users to select. Long press also works.'
+                : 'Tap user for details. Long press for multi-select.'}
+            </Text>
+            <TouchableOpacity style={styles.addUserButton} onPress={() => router.push('/(admin-tabs)/add-user')}>
+              <Text style={styles.addUserButtonText}>Add User</Text>
+            </TouchableOpacity>
+          </View>
+          {selectionMode && (
+            <View style={styles.bulkBar}>
+              <Text style={styles.bulkText}>{selectedUserIds.length} selected</Text>
+              <View style={styles.bulkActions}>
+                {hasUnblockedSelected && (
+                  <TouchableOpacity
+                    style={[styles.bulkButton, styles.bulkBlockButton]}
+                    onPress={() => handleBulkAction('block')}
+                    disabled={bulkSubmitting || !selectedUserIds.length}
+                  >
+                    <Text style={styles.bulkButtonText}>{bulkSubmitting ? '...' : 'Block'}</Text>
+                  </TouchableOpacity>
+                )}
+                {hasBlockedSelected && (
+                  <TouchableOpacity
+                    style={[styles.bulkButton, styles.bulkUnblockButton]}
+                    onPress={() => handleBulkAction('unblock')}
+                    disabled={bulkSubmitting || !selectedUserIds.length}
+                  >
+                    <Text style={styles.bulkButtonText}>{bulkSubmitting ? '...' : 'Unblock'}</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.bulkButton, styles.bulkDeleteButton]}
+                  onPress={confirmBulkDelete}
+                  disabled={bulkSubmitting || !selectedUserIds.length}
+                >
+                  <Text style={styles.bulkButtonText}>{bulkSubmitting ? '...' : 'Delete'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.bulkClearButton} onPress={clearSelection} disabled={bulkSubmitting}>
+                  <Text style={styles.bulkClearText}>Clear</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
           <FlatList
             data={employees}
             renderItem={renderEmployeeItem}
@@ -102,27 +342,118 @@ export default function AdminEmployees() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f8fafc',
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0,
   },
   container: {
     flex: 1,
   },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 10,
+  },
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '700',
     color: '#111111',
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 16,
+  },
+  multiSelectButton: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  multiSelectButtonText: {
+    color: '#0f172a',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  listHeader: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+  },
+  listSubtitle: {
+    flex: 1,
+    fontSize: 13,
+    color: '#6b7280',
+  },
+  addUserButton: {
+    backgroundColor: '#2563eb',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+  },
+  addUserButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  bulkBar: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 10,
+    backgroundColor: '#ffffff',
+  },
+  bulkText: {
+    fontSize: 13,
+    color: '#374151',
+    marginBottom: 8,
+    fontWeight: '600',
+  },
+  bulkActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  bulkButton: {
+    borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+  },
+  bulkBlockButton: {
+    backgroundColor: '#d97706',
+  },
+  bulkUnblockButton: {
+    backgroundColor: '#2563eb',
+  },
+  bulkDeleteButton: {
+    backgroundColor: '#dc2626',
+  },
+  bulkButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  bulkClearButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+  },
+  bulkClearText: {
+    color: '#374151',
+    fontSize: 12,
+    fontWeight: '600',
   },
   listContainer: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingBottom: 24,
   },
   employeeCard: {
     backgroundColor: '#ffffff',
     borderRadius: 12,
-    padding: 16,
+    padding: 14,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#e5e7eb',
@@ -130,8 +461,53 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  employeeCardSelected: {
+    borderColor: '#2563eb',
+    backgroundColor: '#eff6ff',
+  },
   employeeInfo: {
     flex: 1,
+    marginRight: 12,
+  },
+  avatarCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#dbeafe',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  avatarImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginRight: 10,
+  },
+  avatarText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1d4ed8',
+  },
+  selectButton: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#64748b',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+    backgroundColor: '#ffffff',
+  },
+  selectButtonActive: {
+    borderColor: '#2563eb',
+    backgroundColor: '#2563eb',
+  },
+  selectButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#ffffff',
   },
   employeeName: {
     fontSize: 16,
@@ -142,14 +518,45 @@ const styles = StyleSheet.create({
   employeeEmail: {
     fontSize: 14,
     color: '#6b7280',
+    marginBottom: 6,
   },
-  arrowContainer: {
-    marginLeft: 16,
+  statusBadge: {
+    alignSelf: 'flex-start',
+    fontSize: 12,
+    fontWeight: '600',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
   },
-  arrow: {
-    fontSize: 20,
-    color: '#9ca3af',
-    fontWeight: '300',
+  activeBadge: {
+    backgroundColor: '#dcfce7',
+    color: '#166534',
+  },
+  blockedBadge: {
+    backgroundColor: '#fee2e2',
+    color: '#991b1b',
+  },
+  actionsColumn: {
+    gap: 8,
+    alignItems: 'flex-end',
+  },
+  actionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    minWidth: 72,
+    alignItems: 'center',
+  },
+  blockButton: {
+    backgroundColor: '#f59e0b',
+  },
+  deleteButton: {
+    backgroundColor: '#dc2626',
+  },
+  actionButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,

@@ -1,12 +1,27 @@
 import React from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 export default function Help() {
+  const router = useRouter();
+  const canGoBack = router.canGoBack();
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.scrollView}>
         <View style={styles.container}>
-          <Text style={styles.title}>Help & Support</Text>
+          <View style={styles.headerRow}>
+            {canGoBack ? (
+              <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.8}>
+                <Ionicons name="chevron-back" size={20} color="#374151" />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.backSpacer} />
+            )}
+            <Text style={styles.headerTitle}>Help & Support</Text>
+            <View style={styles.backSpacer} />
+          </View>
           
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
@@ -100,11 +115,29 @@ const styles = StyleSheet.create({
   container: {
     padding: 20,
   },
-  title: {
-    fontSize: 28,
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  backButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backSpacer: {
+    width: 34,
+    height: 34,
+  },
+  headerTitle: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 18,
     fontWeight: '700',
     color: '#111111',
-    marginBottom: 24,
   },
   section: {
     marginBottom: 32,

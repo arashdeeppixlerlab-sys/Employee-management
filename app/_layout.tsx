@@ -100,6 +100,7 @@ import { Stack } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
 import { View, ActivityIndicator } from 'react-native';
 import { useAuth } from '../src/hooks/useAuth';
+import { I18nProvider, useI18n } from '../src/i18n';
 
 const theme = {
   colors: {
@@ -128,17 +129,27 @@ export default function RootLayout() {
 
   // NO navigation logic here
   return (
+    <I18nProvider>
+      <AppShell />
+    </I18nProvider>
+  );
+}
+
+function AppShell() {
+  const { t } = useI18n();
+
+  return (
     <PaperProvider theme={theme}>
       <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" options={{ title: 'Employee Management' }} />
-        <Stack.Screen name="login/index" options={{ title: 'Login', headerShown: false }} />
-        <Stack.Screen name="employee/index" options={{ title: 'Employee Dashboard' }} />
-        <Stack.Screen name="documents/upload" options={{ title: 'Upload Document' }} />
-        <Stack.Screen name="settings" options={{ title: 'Settings' }} />
-        <Stack.Screen name="security" options={{ title: 'Security' }} />
-        <Stack.Screen name="help" options={{ title: 'Help & Support' }} />
-        <Stack.Screen name="terms" options={{ title: 'Terms & Privacy' }} />
-        <Stack.Screen name="reports" options={{ title: 'Reports' }} />
+        <Stack.Screen name="index" options={{ title: t('app.title') }} />
+        <Stack.Screen name="login/index" options={{ title: t('app.login'), headerShown: false }} />
+        <Stack.Screen name="employee/index" options={{ title: t('app.employeeDashboard') }} />
+        <Stack.Screen name="documents/upload" options={{ title: t('app.uploadDocument') }} />
+        <Stack.Screen name="settings" options={{ title: t('settings.title') }} />
+        <Stack.Screen name="security" options={{ title: t('security.title') }} />
+        <Stack.Screen name="help" options={{ title: t('app.helpSupport') }} />
+        <Stack.Screen name="terms" options={{ title: t('app.termsPrivacy') }} />
+        <Stack.Screen name="reports" options={{ title: t('app.reports') }} />
     
       </Stack>
     </PaperProvider>

@@ -135,11 +135,32 @@ export const useAuth = () => {
     setAuthState(prev => ({ ...prev, error: null }));
   };
 
+  const refreshProfile = async (): Promise<boolean> => {
+    try {
+      if (!authState.user?.id) return false;
+      
+      const profile = await AuthService.fetchProfile(authState.user.id);
+      
+      if (isMounted.current && profile) {
+        setAuthState(prev => ({
+          ...prev,
+          profile,
+        }));
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Failed to refresh profile:', error);
+      return false;
+    }
+  };
+
   return {
     ...authState,
     login,
     logout,
     clearError,
+    refreshProfile,
     isAuthenticated: !!authState.user,
     isAdmin: authState.profile?.role === 'admin',
     isEmployee: authState.profile?.role === 'employee',

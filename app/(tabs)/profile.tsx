@@ -7,6 +7,7 @@ import {
   ScrollView,
   Alert,
   Platform,
+  Image,
 } from 'react-native';
 import {
   Card,
@@ -18,13 +19,15 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/hooks/useAuth';
 import { supabase } from '../../src/services/supabase/supabaseClient';
+import { ProfilePhotoService } from '../../src/services/ProfilePhotoService';
 import AuthGuard from '../../src/components/AuthGuard';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, profile: authProfile } = useAuth();
+  const { user, profile: authProfile, refreshProfile } = useAuth();
   const [displayProfile, setDisplayProfile] = React.useState<any>(authProfile);
   const [editMode, setEditMode] = React.useState(false);
+  const [photoLoading, setPhotoLoading] = React.useState(false);
 
   type EditableProfile = {
     name?: string | null;
@@ -183,6 +186,9 @@ export default function ProfileScreen() {
         return;
       }
 
+      // Refresh global auth profile state so other screens see updated data
+      await refreshProfile();
+
       Alert.alert('Success', 'Profile updated successfully');
       setEditMode(false);
       const usedPayload = result.usedPayload || payload;
@@ -208,6 +214,58 @@ export default function ProfileScreen() {
     } catch (e) {
       console.error('Profile save exception:', e);
       Alert.alert('Error', 'Failed to save profile');
+    }
+  };
+
+  const handleUploadPhoto = async () => {
+    if (!user?.id || photoLoading) return;
+    setPhotoLoading(true);
+    try {
+      const result = await ProfilePhotoService.uploadProfilePhoto(
+        user.id,
+        displayProfile?.profile_photo_url,
+      );
+      if (!result.success) {
+        Alert.alert('Error', result.error || 'Failed to upload photo');
+        return;
+      }
+
+      await refreshProfile();
+      setDisplayProfile((prev: any) => ({
+        ...prev,
+        profile_photo_url: result.photoUrl || null,
+      }));
+      Alert.alert('Success', 'Profile photo updated');
+    } catch (e) {
+      Alert.alert('Error', 'Failed to upload photo');
+    } finally {
+      setPhotoLoading(false);
+    }
+  };
+
+  const handleDeletePhoto = async () => {
+    if (!user?.id || photoLoading) return;
+    if (!displayProfile?.profile_photo_url) return;
+    setPhotoLoading(true);
+    try {
+      const result = await ProfilePhotoService.removeProfilePhoto(
+        user.id,
+        displayProfile?.profile_photo_url,
+      );
+      if (!result.success) {
+        Alert.alert('Error', result.error || 'Failed to delete photo');
+        return;
+      }
+      await refreshProfile();
+      setDisplayProfile((prev: any) => ({
+        ...prev,
+        profile_photo_url: null,
+      }));
+      Alert.alert('Success', 'Profile photo removed');
+    } catch (e) {
+      Alert.alert('Error', 'Failed to delete photo');
+    } finally {
+      setPhotoLoading(false);
     }
   };
 
@@ -253,11 +311,15 @@ export default function ProfileScreen() {
             <Card style={styles.profileCard}>
               <Card.Content style={styles.profileContent}>
                 <View style={styles.profileHeader}>
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>
-                      {(displayProfile?.email?.[0] || 'U').toUpperCase()}
-                    </Text>
-                  </View>
+                  {displayProfile?.profile_photo_url ? (
+                    <Image source={{ uri: displayProfile.profile_photo_url }} style={styles.avatarImage} />
+                  ) : (
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>
+                        {(displayProfile?.email?.[0] || 'U').toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
                   <View style={styles.profileInfo}>
                     <Text style={styles.userName}>
                       {displayProfile?.email?.split('@')[0] || 'User'}
@@ -361,6 +423,27 @@ export default function ProfileScreen() {
                     multiline
                   />
 
+                  <View style={styles.photoActions}>
+                    <Button
+                      mode="outlined"
+                      onPress={handleUploadPhoto}
+                      loading={photoLoading}
+                      disabled={photoLoading}
+                    >
+                      {displayProfile?.profile_photo_url ? 'Update Photo' : 'Add Photo'}
+                    </Button>
+                    {displayProfile?.profile_photo_url ? (
+                      <Button
+                        mode="text"
+                        onPress={handleDeletePhoto}
+                        disabled={photoLoading}
+                        textColor="#ef4444"
+                      >
+                        Delete Photo
+                      </Button>
+                    ) : null}
+                  </View>
+
                   <View style={styles.editActions}>
                     <Button
                       mode="outlined"
@@ -414,6 +497,20 @@ export default function ProfileScreen() {
                   left={(props) => <List.Icon {...props} icon="upload" />}
                   onPress={() => router.push('/documents/upload')}
                 />
+
+                <List.Item
+                  title="Settings"
+                  description="Manage notifications and preferences"
+                  left={(props) => <List.Icon {...props} icon="cog-outline" />}
+                  onPress={() => router.push('/settings')}
+                />
+
+                <List.Item
+                  title="Security"
+                  description="Change your password"
+                  left={(props) => <List.Icon {...props} icon="shield-lock-outline" />}
+                  onPress={() => router.push('/security')}
+                />
               </Card.Content>
             </Card>
 
@@ -466,6 +563,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#2563eb',
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 16,
+  },
+  avatarImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     marginRight: 16,
   },
   avatarText: {
@@ -524,6 +627,12 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     gap: 12,
     marginTop: 8,
+  },
+  photoActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
   },
   editButton: {
     minWidth: 120,

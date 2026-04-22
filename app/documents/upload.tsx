@@ -6,6 +6,7 @@ import {
   SafeAreaView,
   ScrollView,
   Alert,
+  TouchableOpacity,
 } from 'react-native';
 import {
   Button,
@@ -15,17 +16,21 @@ import {
 } from 'react-native-paper';
 import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { DocumentService } from '../../src/services/documentService';
 import { supabase } from '../../src/services/supabase/supabaseClient';
 import AuthGuard from '../../src/components/AuthGuard';
+import { notifyDocumentsChanged } from '../../src/utils/documentsSync';
 
 export default function DocumentUploadScreen() {
   const router = useRouter();
+  const canGoBack = router.canGoBack();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<any>(null);
   const [fileName, setFileName] = useState<string>('');
+  const [userRole, setUserRole] = useState<'admin' | 'employee'>('employee');
 
   const pickDocument = async () => {
     try {
@@ -58,10 +63,6 @@ export default function DocumentUploadScreen() {
       Alert.alert('Error', 'Please select a file and enter a name.');
       return;
     }
-    // changes i did:
-
-    const { data: session } = await supabase.auth.getSession();
-    console.log('SESSION:', session);
     setUploading(true);
     setError(null);
     setSuccess(null);
@@ -75,42 +76,44 @@ export default function DocumentUploadScreen() {
         return;
       }
 
-      console.log('[UPLOAD_DEBUG] FILE:', selectedFile); // FIX
-      console.log('[UPLOAD_DEBUG] USER:', user.id);
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      const resolvedRole = profileData?.role === 'admin' ? 'admin' : 'employee';
+      setUserRole(resolvedRole);
 
       const response = await DocumentService.uploadDocument(
-        selectedFile,     // FIX: file
-        user.id,          // FIX: userId
-        'employee'        // FIX: role
+        selectedFile,
+        user.id,
+        resolvedRole
       );
 
-      console.log('UPLOAD_RESPONSE:', response);
-
       if (response.success) {
-        console.log('UPLOAD SUCCESS TRIGGERED');
+        if (resolvedRole === 'admin') {
+          notifyDocumentsChanged({ scope: 'admin' });
+        } else {
+          notifyDocumentsChanged({
+            scope: 'employee',
+            employeeId: user.id,
+          });
+        }
 
         setSuccess('Document uploaded successfully!');
         setSelectedFile(null);
         setFileName('');
 
-        // Navigate after a short delay to show success message
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .maybeSingle();
-
         const nextRoute =
-          profileData?.role === 'admin'
-            ? '/(admin-tabs)/admin-documents'
+          resolvedRole === 'admin'
+            ? '/(admin-tabs)/documents-admin'
             : '/(tabs)/documents';
 
         setTimeout(() => {
           router.replace(nextRoute);
-        }, 2000);
+        }, 500);
       } else {
-        console.log('UPLOAD FAILED:', response.error);
-
         setError(response.error || 'Upload failed');
       }
     } catch (err) {
@@ -141,9 +144,19 @@ export default function DocumentUploadScreen() {
       <SafeAreaView style={styles.safeArea}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
           <View style={styles.container}>
-            <Text style={styles.title}>Upload Document</Text>
+            <View style={styles.headerRow}>
+              {canGoBack ? (
+                <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.8}>
+                  <Ionicons name="chevron-back" size={20} color="#374151" />
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.backSpacer} />
+              )}
+              <Text style={styles.headerTitle}>Upload Document</Text>
+              <View style={styles.backSpacer} />
+            </View>
             <Text style={styles.subtitle}>
-              Select a file to upload to your document library
+              Select a file to upload to your {userRole === 'admin' ? 'organization' : 'personal'} document library
             </Text>
 
             <Card style={styles.card}>
@@ -237,13 +250,29 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 24,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  backButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backSpacer: {
+    width: 34,
+    height: 34,
+  },
+  headerTitle: {
+    flex: 1,
     textAlign: 'center',
-    marginBottom: 8,
+    fontSize: 18,
+    fontWeight: '700',
     color: '#111111',
-    lineHeight: 36,
   },
   subtitle: {
     fontSize: 16,

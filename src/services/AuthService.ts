@@ -51,6 +51,14 @@ export class AuthService {
         };
       }
 
+      if (profile.is_blocked) {
+        await this.logout();
+        return {
+          success: false,
+          error: profile.blocked_reason || 'Your account has been blocked by an administrator.',
+        };
+      }
+
       return {
         success: true,
         profile,
@@ -115,6 +123,11 @@ export class AuthService {
       }
 
       const profile = await this.fetchProfile(user.id);
+
+      if (profile?.is_blocked) {
+        await this.safeLogout();
+        return { user: null, profile: null };
+      }
       
       return {
         user,
@@ -134,6 +147,55 @@ export class AuthService {
       await supabase.auth.signOut({ scope: 'global' });
     } catch (error) {
       console.log('Logout error (safe to ignore):', error);
+    }
+  }
+
+  static async changePassword(
+    currentPassword: string,
+    newPassword: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user?.email) {
+        return {
+          success: false,
+          error: 'User not authenticated',
+        };
+      }
+
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
+      });
+
+      if (reauthError) {
+        return {
+          success: false,
+          error: 'Current password is incorrect',
+        };
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (updateError) {
+        return {
+          success: false,
+          error: updateError.message || 'Failed to update password',
+        };
+      }
+
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update password',
+      };
     }
   }
 }

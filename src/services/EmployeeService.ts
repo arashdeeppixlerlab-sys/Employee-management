@@ -11,6 +11,7 @@ export class EmployeeService {
         .from('profiles')
         .select('*')
         .eq('role', 'employee')
+        .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
       if (error) {

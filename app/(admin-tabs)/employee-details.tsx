@@ -8,20 +8,23 @@ import {
   ScrollView,
   FlatList,
   TouchableOpacity,
-  Alert,
-  Linking
+  Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons'; // FIX: Add back button icon
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { EmployeeService, Employee } from '../../src/services/EmployeeService';
 import { DocumentService } from '../../src/services/documentService';
 import { supabase } from '../../src/services/supabase/supabaseClient';
+import DocumentViewerModal from '../../src/components/DocumentViewerModal';
 
 export default function EmployeeDetails() {
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [documents, setDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState<any | null>(null);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerLoading, setViewerLoading] = useState(false);
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
@@ -56,15 +59,19 @@ export default function EmployeeDetails() {
 
   const handleViewEmployeeDocument = async (doc: any) => {
     try {
+      setViewerLoading(true);
       const resolvedUrl = await resolveEmployeeDocUrl(doc);
       if (!resolvedUrl) {
         Alert.alert('Error', 'Document URL not available');
         return;
       }
-      await Linking.openURL(resolvedUrl);
+      setSelectedDocument({ ...doc, file_url: resolvedUrl });
+      setViewerVisible(true);
     } catch (e) {
       console.log('[VIEW_DEBUG][ADMIN-EMPLOYEE] openURL error:', e);
       Alert.alert('Error', 'Failed to open document');
+    } finally {
+      setViewerLoading(false);
     }
   };
 
@@ -240,6 +247,14 @@ console.log("admin employee id:" ,employee?.id);
           </View>
         </View>
       </ScrollView>
+
+      <DocumentViewerModal
+        visible={viewerVisible}
+        onClose={() => setViewerVisible(false)}
+        fileName={selectedDocument?.file_name}
+        fileUrl={selectedDocument?.file_url}
+        loading={viewerLoading}
+      />
     </SafeAreaView>
   );
 }
