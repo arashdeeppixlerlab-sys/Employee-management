@@ -18,15 +18,19 @@ import { useRouter } from 'expo-router';
 import { EmployeeService, Employee } from '../../src/services/EmployeeService';
 import { AdminUserManagementService } from '../../src/services/AdminUserManagementService';
 import AuthGuard from '../../src/components/AuthGuard';
+import { confirmAction } from '../../src/utils/confirmAction';
 
 export default function AdminEmployees() {
+  type RowActionType = 'block' | 'delete';
+  type BulkActionType = 'block' | 'unblock' | 'delete';
+
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
-  const [actionUserId, setActionUserId] = useState<string | null>(null);
-  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [pendingRowAction, setPendingRowAction] = useState<{ userId: string; type: RowActionType } | null>(null);
+  const [pendingBulkAction, setPendingBulkAction] = useState<BulkActionType | null>(null);
   const router = useRouter();
 
   const fetchEmployees = async () => {
@@ -54,6 +58,14 @@ export default function AdminEmployees() {
     router.push(`/(admin-tabs)/employee-details?id=${employee.id}`);
   };
 
+  const handleBackPress = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace('/(admin-tabs)/dashboard');
+  };
+
   const handleEmployeeCardPress = (employee: Employee) => {
     if (selectionMode) {
       toggleSelect(employee.id);
@@ -71,11 +83,29 @@ export default function AdminEmployees() {
 
   const handleBlockToggle = async (employee: Employee) => {
     const isBlocked = !!employee.is_blocked;
-    setActionUserId(employee.id);
-    const result = isBlocked
-      ? await AdminUserManagementService.unblockUser(employee.id)
-      : await AdminUserManagementService.blockUser(employee.id);
-    setActionUserId(null);
+    const confirmTitle = isBlocked ? 'Unblock User' : 'Block User';
+    const confirmMessage = isBlocked
+      ? `Unblock ${employee.email}?`
+      : `Block ${employee.email}?`;
+    const confirmed = await confirmAction({
+      title: confirmTitle,
+      message: confirmMessage,
+      confirmText: isBlocked ? 'Unblock' : 'Block',
+    });
+
+    if (!confirmed) return;
+
+    setPendingRowAction({ userId: employee.id, type: 'block' });
+    let result;
+    try {
+      result = isBlocked
+        ? await AdminUserManagementService.unblockUser(employee.id)
+        : await AdminUserManagementService.blockUser(employee.id);
+    } finally {
+      setPendingRowAction((prev) =>
+        prev?.userId === employee.id && prev.type === 'block' ? null : prev
+      );
+    }
 
     if (!result.success) {
       Alert.alert(isBlocked ? 'Unblock Failed' : 'Block Failed', result.error || 'Please try again.');
@@ -86,32 +116,32 @@ export default function AdminEmployees() {
     fetchEmployees();
   };
 
-  const handleDeleteUser = (employee: Employee) => {
-    Alert.alert(
-      'Delete User',
-      `Permanently delete ${employee.email}? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            setActionUserId(employee.id);
-            const result = await AdminUserManagementService.deleteUser(employee.id);
-            setActionUserId(null);
+  const handleDeleteUser = async (employee: Employee) => {
+    const confirmed = await confirmAction({
+      title: 'Delete User',
+      message: `Permanently delete ${employee.email}? This cannot be undone.`,
+      confirmText: 'Delete',
+    });
+    if (!confirmed) return;
 
-            if (!result.success) {
-              Alert.alert('Delete Failed', result.error || 'Please try again.');
-              return;
-            }
+    setPendingRowAction({ userId: employee.id, type: 'delete' });
+    let result;
+    try {
+      result = await AdminUserManagementService.deleteUser(employee.id);
+    } finally {
+      setPendingRowAction((prev) =>
+        prev?.userId === employee.id && prev.type === 'delete' ? null : prev
+      );
+    }
 
-            Alert.alert('Success', 'User deleted permanently.');
-            setSelectedUserIds((prev) => prev.filter((id) => id !== employee.id));
-            fetchEmployees();
-          },
-        },
-      ]
-    );
+    if (!result.success) {
+      Alert.alert('Delete Failed', result.error || 'Please try again.');
+      return;
+    }
+
+    Alert.alert('Success', 'User deleted permanently.');
+    setSelectedUserIds((prev) => prev.filter((id) => id !== employee.id));
+    fetchEmployees();
   };
 
   const toggleSelect = (userId: string) => {
@@ -129,7 +159,7 @@ export default function AdminEmployees() {
   const hasBlockedSelected = selectedEmployees.some((employee) => !!employee.is_blocked);
   const hasUnblockedSelected = selectedEmployees.some((employee) => !employee.is_blocked);
 
-  const handleBulkAction = async (type: 'block' | 'unblock' | 'delete') => {
+  const handleBulkAction = async (type: BulkActionType) => {
     if (!selectedEmployees.length) return;
 
     const targetUsers =
@@ -144,23 +174,25 @@ export default function AdminEmployees() {
       return;
     }
 
-    setBulkSubmitting(true);
+    setPendingBulkAction(type);
     let successCount = 0;
     let failedCount = 0;
 
-    for (const user of targetUsers) {
-      const result =
-        type === 'block'
-          ? await AdminUserManagementService.blockUser(user.id)
-          : type === 'unblock'
-            ? await AdminUserManagementService.unblockUser(user.id)
-            : await AdminUserManagementService.deleteUser(user.id);
+    try {
+      for (const user of targetUsers) {
+        const result =
+          type === 'block'
+            ? await AdminUserManagementService.blockUser(user.id)
+            : type === 'unblock'
+              ? await AdminUserManagementService.unblockUser(user.id)
+              : await AdminUserManagementService.deleteUser(user.id);
 
-      if (result.success) successCount += 1;
-      else failedCount += 1;
+        if (result.success) successCount += 1;
+        else failedCount += 1;
+      }
+    } finally {
+      setPendingBulkAction(null);
     }
-
-    setBulkSubmitting(false);
     fetchEmployees();
     setSelectedUserIds([]);
     setSelectionMode(false);
@@ -173,19 +205,18 @@ export default function AdminEmployees() {
     );
   };
 
-  const confirmBulkDelete = () => {
-    Alert.alert(
-      'Delete Selected Users',
-      `Delete ${selectedUserIds.length} selected user(s)? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => handleBulkAction('delete'),
-        },
-      ]
-    );
+  const confirmBulkAction = async (type: BulkActionType) => {
+    if (!selectedUserIds.length) return;
+
+    const actionLabel = type === 'delete' ? 'Delete' : type === 'block' ? 'Block' : 'Unblock';
+    const confirmed = await confirmAction({
+      title: `${actionLabel} Selected Users`,
+      message: `${actionLabel} ${selectedUserIds.length} selected user(s)?${type === 'delete' ? ' This cannot be undone.' : ''}`,
+      confirmText: actionLabel,
+    });
+
+    if (!confirmed) return;
+    await handleBulkAction(type);
   };
 
   const renderEmployeeItem = ({ item }: { item: Employee }) => (
@@ -219,24 +250,34 @@ export default function AdminEmployees() {
         <Ionicons name="checkmark-circle-outline" size={20} color="#94a3b8" />
       ) : (
         <View style={styles.actionsColumn}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.blockButton]}
-            onPress={() => handleBlockToggle(item)}
-            disabled={actionUserId === item.id}
-          >
-            <Text style={styles.actionButtonText}>
-              {actionUserId === item.id ? '...' : item.is_blocked ? 'Unblock' : 'Block'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.deleteButton]}
-            onPress={() => handleDeleteUser(item)}
-            disabled={actionUserId === item.id}
-          >
-            <Text style={styles.actionButtonText}>
-              {actionUserId === item.id ? '...' : 'Delete'}
-            </Text>
-          </TouchableOpacity>
+          {(() => {
+            const rowBusy = pendingRowAction?.userId === item.id;
+            const isBlockPending = rowBusy && pendingRowAction?.type === 'block';
+            const isDeletePending = rowBusy && pendingRowAction?.type === 'delete';
+
+            return (
+              <>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.blockButton]}
+                  onPress={() => handleBlockToggle(item)}
+                  disabled={rowBusy}
+                >
+                  <Text style={styles.actionButtonText}>
+                    {isBlockPending ? '...' : item.is_blocked ? 'Unblock' : 'Block'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.deleteButton]}
+                  onPress={() => handleDeleteUser(item)}
+                  disabled={rowBusy}
+                >
+                  <Text style={styles.actionButtonText}>
+                    {isDeletePending ? '...' : 'Delete'}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            );
+          })()}
         </View>
       )}
     </TouchableOpacity>
@@ -260,6 +301,9 @@ export default function AdminEmployees() {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.container}>
           <View style={styles.titleRow}>
+            <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
+              <Ionicons name="chevron-back" size={22} color="#1f2937" />
+            </TouchableOpacity>
             <Text style={styles.title}>Employees</Text>
             <TouchableOpacity
               style={styles.multiSelectButton}
@@ -291,29 +335,29 @@ export default function AdminEmployees() {
                 {hasUnblockedSelected && (
                   <TouchableOpacity
                     style={[styles.bulkButton, styles.bulkBlockButton]}
-                    onPress={() => handleBulkAction('block')}
-                    disabled={bulkSubmitting || !selectedUserIds.length}
+                    onPress={() => confirmBulkAction('block')}
+                    disabled={pendingBulkAction !== null || !selectedUserIds.length}
                   >
-                    <Text style={styles.bulkButtonText}>{bulkSubmitting ? '...' : 'Block'}</Text>
+                    <Text style={styles.bulkButtonText}>{pendingBulkAction === 'block' ? '...' : 'Block'}</Text>
                   </TouchableOpacity>
                 )}
                 {hasBlockedSelected && (
                   <TouchableOpacity
                     style={[styles.bulkButton, styles.bulkUnblockButton]}
-                    onPress={() => handleBulkAction('unblock')}
-                    disabled={bulkSubmitting || !selectedUserIds.length}
+                    onPress={() => confirmBulkAction('unblock')}
+                    disabled={pendingBulkAction !== null || !selectedUserIds.length}
                   >
-                    <Text style={styles.bulkButtonText}>{bulkSubmitting ? '...' : 'Unblock'}</Text>
+                    <Text style={styles.bulkButtonText}>{pendingBulkAction === 'unblock' ? '...' : 'Unblock'}</Text>
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity
                   style={[styles.bulkButton, styles.bulkDeleteButton]}
-                  onPress={confirmBulkDelete}
-                  disabled={bulkSubmitting || !selectedUserIds.length}
+                  onPress={() => confirmBulkAction('delete')}
+                  disabled={pendingBulkAction !== null || !selectedUserIds.length}
                 >
-                  <Text style={styles.bulkButtonText}>{bulkSubmitting ? '...' : 'Delete'}</Text>
+                  <Text style={styles.bulkButtonText}>{pendingBulkAction === 'delete' ? '...' : 'Delete'}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.bulkClearButton} onPress={clearSelection} disabled={bulkSubmitting}>
+                <TouchableOpacity style={styles.bulkClearButton} onPress={clearSelection} disabled={pendingBulkAction !== null}>
                   <Text style={styles.bulkClearText}>Clear</Text>
                 </TouchableOpacity>
               </View>
@@ -350,16 +394,25 @@ const styles = StyleSheet.create({
   },
   titleRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 10,
+    gap: 10,
+  },
+  backButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e2e8f0',
   },
   title: {
     fontSize: 26,
     fontWeight: '700',
     color: '#111111',
+    flex: 1,
   },
   multiSelectButton: {
     backgroundColor: '#e2e8f0',

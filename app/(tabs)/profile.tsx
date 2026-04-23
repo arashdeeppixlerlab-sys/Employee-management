@@ -6,7 +6,6 @@ import {
   SafeAreaView,
   ScrollView,
   Alert,
-  Platform,
   Image,
 } from 'react-native';
 import {
@@ -17,13 +16,16 @@ import {
   TextInput,
 } from 'react-native-paper';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/hooks/useAuth';
 import { supabase } from '../../src/services/supabase/supabaseClient';
 import { ProfilePhotoService } from '../../src/services/ProfilePhotoService';
 import AuthGuard from '../../src/components/AuthGuard';
+import { confirmAction } from '../../src/utils/confirmAction';
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { user, profile: authProfile, refreshProfile } = useAuth();
   const [displayProfile, setDisplayProfile] = React.useState<any>(authProfile);
   const [editMode, setEditMode] = React.useState(false);
@@ -271,18 +273,11 @@ export default function ProfileScreen() {
 
   const handleSignOut = async () => {
     // Platform-specific confirmation
-    const confirmed = Platform.OS === 'web'
-      ? window.confirm('Are you sure you want to sign out?')
-      : await new Promise<boolean>((resolve) => {
-        Alert.alert(
-          'Sign Out',
-          'Are you sure you want to sign out?',
-          [
-            { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-            { text: 'Sign Out', style: 'destructive', onPress: () => resolve(true) },
-          ]
-        );
-      });
+    const confirmed = await confirmAction({
+      title: 'Sign Out',
+      message: 'Are you sure you want to sign out?',
+      confirmText: 'Sign Out',
+    });
 
     if (!confirmed) return;
 
@@ -306,7 +301,7 @@ export default function ProfileScreen() {
     <>
       <SafeAreaView style={styles.safeArea}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-          <View style={styles.container}>
+          <View style={[styles.container, { paddingTop: Math.max(insets.top, 10) }]}>
             {/* Profile Header */}
             <Card style={styles.profileCard}>
               <Card.Content style={styles.profileContent}>

@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Platform } from 'react-native';
 import {
   View,
   Text,
@@ -10,7 +9,7 @@ import {
   ActivityIndicator,
   StatusBar,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Button,
   Card,
@@ -23,11 +22,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useDocuments } from '../../src/hooks/useDocuments';
 import { useAuth } from '../../src/hooks/useAuth';
 import AuthGuard from '../../src/components/AuthGuard';
-import { supabase } from '../../src/services/supabase/supabaseClient';
 import DocumentViewerModal from '../../src/components/DocumentViewerModal';
+import { resolveDocumentOpenUrl } from '../../src/utils/documentOpenUrl';
+import { confirmAction } from '../../src/utils/confirmAction';
+import { formatDocumentDate, getDocumentFileIcon } from '../../src/utils/documentDisplay';
 
 export default function DocumentsTabScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { profile } = useAuth();
   const isEmployee = profile?.role === 'employee';
   const [selectedDocument, setSelectedDocument] = useState<any>(null);
@@ -63,82 +65,6 @@ export default function DocumentsTabScreen() {
     useCallback(() => {
       fetchDocuments();
     }, [fetchDocuments])
-  );
-
-  const resolveDocumentOpenUrl = useCallback(
-    async (document: any): Promise<string | null> => {
-      const bucket = 'documents';
-      const fileUrl: string | undefined = document?.file_url;
-      const legacyFilePath: string | undefined =
-        document?.file_path || document?.filePath || document?.path;
-
-      console.log('[OPEN_DEBUG] Document clicked:', {
-        id: document?.id,
-        file_name: document?.file_name,
-        file_url: fileUrl,
-        legacyFilePath,
-      });
-
-      // 1) If we already have an http(s) URL, prefer it (but still try signed URL if it's Supabase public).
-      if (typeof fileUrl === 'string' && fileUrl.length > 0) {
-        const isHttp = fileUrl.startsWith('http://') || fileUrl.startsWith('https://');
-        if (isHttp) {
-          // Try to convert public URL -> object path -> signed URL (works for both public/private).
-          const publicMarker = `/storage/v1/object/public/${bucket}/`;
-          const idx = fileUrl.indexOf(publicMarker);
-          if (idx !== -1) {
-            const objectPath = fileUrl.substring(idx + publicMarker.length);
-            if (objectPath) {
-              const { data: signedData, error: signedError } =
-                await supabase.storage.from(bucket).createSignedUrl(objectPath, 60 * 60);
-
-              if (!signedError && signedData?.signedUrl) {
-                console.log('[OPEN_DEBUG] Using signedUrl from public URL:', signedData.signedUrl);
-                return signedData.signedUrl;
-              }
-
-              console.log('[OPEN_DEBUG] Signed URL creation failed, fallback:', {
-                message: signedError?.message,
-              });
-            }
-          }
-
-          console.log('[OPEN_DEBUG] Opening direct URL:', fileUrl);
-          return fileUrl;
-        }
-
-        // 2) If file_url isn't http(s), it might actually be an object path.
-        const objectPath =
-          fileUrl.startsWith(`${bucket}/`) ? fileUrl.slice(bucket.length + 1) : fileUrl;
-        if (objectPath) {
-          const { data: signedData, error: signedError } =
-            await supabase.storage.from(bucket).createSignedUrl(objectPath, 60 * 60);
-          if (!signedError && signedData?.signedUrl) {
-            console.log('[OPEN_DEBUG] Using signedUrl from objectPath:', signedData.signedUrl);
-            return signedData.signedUrl;
-          }
-          console.log('[OPEN_DEBUG] Signed URL failed from objectPath, fallback to file_url:', {
-            message: signedError?.message,
-          });
-        }
-      }
-
-      // 3) Legacy fallback: if DB stored file_path for older uploads.
-      if (typeof legacyFilePath === 'string' && legacyFilePath.length > 0) {
-        const { data: signedData, error: signedError } =
-          await supabase.storage.from(bucket).createSignedUrl(legacyFilePath, 60 * 60);
-        if (!signedError && signedData?.signedUrl) {
-          console.log('[OPEN_DEBUG] Using signedUrl from legacyFilePath:', signedData.signedUrl);
-          return signedData.signedUrl;
-        }
-        console.log('[OPEN_DEBUG] Signed URL failed from legacyFilePath:', {
-          message: signedError?.message,
-        });
-      }
-
-      return null;
-    },
-    [],
   );
 
   const handleViewDocument = async (document: any) => {
@@ -187,7 +113,7 @@ export default function DocumentsTabScreen() {
     }
   };
 
-  const handleMultiSelectDelete = () => {
+  const handleMultiSelectDelete = async () => {
   if (selectedIds.length === 0) return;
 
   const confirmDelete = async () => {
@@ -209,22 +135,17 @@ export default function DocumentsTabScreen() {
     }
   };
 
-  if (Platform.OS === 'web') {
-    const confirmed = window.confirm(`Delete ${selectedIds.length} documents?`);
-    if (confirmed) confirmDelete();
-  } else {
-    Alert.alert(
-      'Delete Documents',
-      `Delete ${selectedIds.length} documents?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: confirmDelete },
-      ]
-    );
+  const confirmed = await confirmAction({
+    title: 'Delete Documents',
+    message: `Delete ${selectedIds.length} documents?`,
+    confirmText: 'Delete',
+  });
+  if (confirmed) {
+    await confirmDelete();
   }
 };
 
-  const handleDeleteDocument = (document: any) => {
+  const handleDeleteDocument = async (document: any) => {
   console.log('[UI] Delete clicked with ID:', document.id);
 
   const confirmDelete = async () => {
@@ -241,57 +162,19 @@ export default function DocumentsTabScreen() {
     }
   };
 
-  // 🔥 FIX FOR WEB + MOBILE
-  if (Platform.OS === 'web') {
-    const confirmed = window.confirm(`Delete ${document.file_name}?`);
-    if (confirmed) confirmDelete();
-  } else {
-    Alert.alert(
-      'Delete Document',
-      `Are you sure you want to delete ${document.file_name}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: confirmDelete },
-      ]
-    );
+  const confirmed = await confirmAction({
+    title: 'Delete Document',
+    message: `Are you sure you want to delete ${document.file_name}?`,
+    confirmText: 'Delete',
+  });
+  if (confirmed) {
+    await confirmDelete();
   }
 };
 
   const renderDocumentCard = ({ item }: { item: any }) => {
     const canDeleteDocument =
       profile?.role === 'admin' || item.uploaded_by !== 'admin';
-
-    const getFileIcon = (fileName: string) => {
-      const extension = fileName.split('.').pop()?.toLowerCase();
-      switch (extension) {
-        case 'pdf':
-          return 'file-pdf-box';
-        case 'doc':
-        case 'docx':
-          return 'file-word';
-        case 'xls':
-        case 'xlsx':
-          return 'file-excel';
-        case 'ppt':
-        case 'pptx':
-          return 'file-powerpoint';
-        case 'jpg':
-        case 'jpeg':
-        case 'png':
-        case 'gif':
-        case 'bmp':
-        case 'webp':
-          return 'file-image';
-        case 'txt':
-          return 'file-document';
-        default:
-          return 'file';
-      }
-    };
-
-    const formatDate = (dateString: string) => {
-      return new Date(dateString).toLocaleDateString();
-    };
 
     return (
       <Card style={styles.documentCard}>
@@ -317,7 +200,7 @@ export default function DocumentsTabScreen() {
               
               <View style={styles.fileIconContainer}>
                 <IconButton
-                  icon={getFileIcon(item.file_name)}
+                  icon={getDocumentFileIcon(item.file_name)}
                   size={32}
                   iconColor="#2563eb"
                   onPress={() => multiSelectMode ? toggleSelection(item.id) : handleViewDocument(item)}
@@ -329,7 +212,7 @@ export default function DocumentsTabScreen() {
                   {item.file_name}
                 </Text>
                 <Text style={styles.uploadDate}>
-                  Uploaded: {formatDate(item.created_at)}
+                  Uploaded: {formatDocumentDate(item.created_at)}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -457,7 +340,7 @@ export default function DocumentsTabScreen() {
               data={visibleDocuments}
               renderItem={renderDocumentCard}
               keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.listContainer}
+              contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 120 }]}
               showsVerticalScrollIndicator={false}
               onRefresh={fetchDocuments}
               refreshing={loading}
@@ -611,7 +494,6 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     gap: 12,
-    paddingBottom: 20,
   },
   documentCard: {
     marginBottom: 12,
@@ -662,6 +544,6 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   snackbar: {
-    marginBottom: 80, // Account for tab bar
+    marginBottom: 120,
   },
 });

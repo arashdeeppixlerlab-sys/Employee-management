@@ -1,15 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, Alert, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, ScrollView, Alert } from 'react-native';
 import { Button, Card, TextInput } from 'react-native-paper';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { AuthService } from '../src/services/AuthService';
 import { useI18n } from '../src/i18n';
+import PageHeader from '../src/components/PageHeader';
 
 export default function Security() {
   const { t } = useI18n();
-  const router = useRouter();
-  const canGoBack = router.canGoBack();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -68,17 +65,7 @@ export default function Security() {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.scrollView}>
         <View style={styles.container}>
-          <View style={styles.headerRow}>
-            {canGoBack ? (
-              <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.8}>
-                <Ionicons name="chevron-back" size={20} color="#374151" />
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.backSpacer} />
-            )}
-            <Text style={styles.headerTitle}>{t('security.title')}</Text>
-            <View style={styles.backSpacer} />
-          </View>
+          <PageHeader title={t('security.title')} />
 
           <Card style={styles.card}>
             <Card.Content>
@@ -163,30 +150,6 @@ const styles = StyleSheet.create({
   container: {
     padding: 20,
     gap: 14,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  backButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#f3f4f6',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  backSpacer: {
-    width: 34,
-    height: 34,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111111',
   },
   card: {
     backgroundColor: '#ffffff',

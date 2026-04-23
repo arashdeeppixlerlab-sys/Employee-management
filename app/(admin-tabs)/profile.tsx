@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   Dimensions,
   Alert,
-  Platform,
   Image,
 } from 'react-native';
 import { Button, Card, Avatar, Divider, TextInput } from 'react-native-paper';
@@ -19,6 +18,7 @@ import { supabase } from '../../src/services/supabase/supabaseClient';
 import AuthGuard from '../../src/components/AuthGuard';
 import { useAuth } from '../../src/hooks/useAuth';
 import { ProfilePhotoService } from '../../src/services/ProfilePhotoService';
+import { confirmAction } from '../../src/utils/confirmAction';
 
 const { width } = Dimensions.get('window');
 
@@ -291,18 +291,11 @@ export default function AdminProfile() {
 
   // ✅ FIXED LOGOUT
   const handleLogout = async () => {
-    const confirmed = Platform.OS === 'web'
-      ? window.confirm('Are you sure you want to sign out?')
-      : await new Promise<boolean>((resolve) => {
-        Alert.alert(
-          'Sign Out',
-          'Are you sure you want to sign out?',
-          [
-            { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-            { text: 'Sign Out', style: 'destructive', onPress: () => resolve(true) },
-          ]
-        );
-      });
+    const confirmed = await confirmAction({
+      title: 'Sign Out',
+      message: 'Are you sure you want to sign out?',
+      confirmText: 'Sign Out',
+    });
 
     if (!confirmed) return;
 

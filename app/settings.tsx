@@ -9,25 +9,27 @@ import {
   Modal,
   Pressable,
   TouchableOpacity,
+  Image,
 } from 'react-native';
 import { Button, Card, Divider, Switch } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../src/hooks/useAuth';
 import { supabase } from '../src/services/supabase/supabaseClient';
-import { getLanguageLabel, LANGUAGE_OPTIONS, normalizeLocale, SupportedLocale, useI18n } from '../src/i18n';
+import { ProfilePhotoService } from '../src/services/ProfilePhotoService';
+import { useI18n } from '../src/i18n';
+import PageHeader from '../src/components/PageHeader';
 
 type SettingsForm = {
   emailNotifications: boolean;
   pushNotifications: boolean;
-  language: SupportedLocale;
   timezone: string;
 };
 
 const DEFAULT_SETTINGS: SettingsForm = {
   emailNotifications: true,
   pushNotifications: true,
-  language: 'en-US',
   timezone: 'UTC+05:30',
 };
 
@@ -41,37 +43,31 @@ const TIMEZONE_OPTIONS = [
 
 export default function Settings() {
   const router = useRouter();
-  const canGoBack = router.canGoBack();
+  const insets = useSafeAreaInsets();
   const { user, profile, refreshProfile } = useAuth();
-  const { t, setLocale } = useI18n();
+  const { t } = useI18n();
+  const [displayProfile, setDisplayProfile] = useState(profile);
   const [form, setForm] = useState<SettingsForm>(DEFAULT_SETTINGS);
   const [initialForm, setInitialForm] = useState<SettingsForm>(DEFAULT_SETTINGS);
   const [saving, setSaving] = useState(false);
-  const [languageMenuVisible, setLanguageMenuVisible] = useState(false);
+  const [photoLoading, setPhotoLoading] = useState(false);
   const [timezoneMenuVisible, setTimezoneMenuVisible] = useState(false);
 
   useEffect(() => {
+    setDisplayProfile(profile);
     const nextForm: SettingsForm = {
       emailNotifications: profile?.email_notifications ?? DEFAULT_SETTINGS.emailNotifications,
       pushNotifications: profile?.push_notifications ?? DEFAULT_SETTINGS.pushNotifications,
-      language: normalizeLocale(profile?.language),
       timezone: profile?.timezone ?? DEFAULT_SETTINGS.timezone,
     };
     setForm(nextForm);
     setInitialForm(nextForm);
   }, [profile]);
 
-  useEffect(() => {
-    if (profile?.language) {
-      setLocale(normalizeLocale(profile.language));
-    }
-  }, [profile?.language, setLocale]);
-
   const hasChanges = useMemo(() => {
     return (
       form.emailNotifications !== initialForm.emailNotifications ||
       form.pushNotifications !== initialForm.pushNotifications ||
-      form.language !== initialForm.language ||
       form.timezone.trim() !== initialForm.timezone.trim()
     );
   }, [form, initialForm]);
@@ -82,7 +78,6 @@ export default function Settings() {
       return;
     }
 
-    const language = normalizeLocale(form.language);
     const timezone = form.timezone.trim();
 
     if (!timezone) {
@@ -97,7 +92,6 @@ export default function Settings() {
         .update({
           email_notifications: form.emailNotifications,
           push_notifications: form.pushNotifications,
-          language,
           timezone,
         })
         .eq('id', user.id);
@@ -107,11 +101,9 @@ export default function Settings() {
         return;
       }
 
-      await setLocale(language);
       await refreshProfile();
       const nextForm = {
         ...form,
-        language,
         timezone,
       };
       setForm(nextForm);
@@ -126,41 +118,121 @@ export default function Settings() {
 
   const handleReset = () => setForm(initialForm);
 
+  const handleUploadPhoto = async () => {
+    if (!user?.id || photoLoading) return;
+    setPhotoLoading(true);
+    try {
+      const result = await ProfilePhotoService.uploadProfilePhoto(
+        user.id,
+        displayProfile?.profile_photo_url,
+      );
+
+      if (!result.success) {
+        if (result.error === 'Image selection cancelled') return;
+        Alert.alert(t('common.error'), result.error || 'Failed to upload photo');
+        return;
+      }
+
+      await refreshProfile();
+      setDisplayProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              profile_photo_url: result.photoUrl || null,
+            }
+          : prev,
+      );
+    } catch {
+      Alert.alert(t('common.error'), 'Failed to upload photo');
+    } finally {
+      setPhotoLoading(false);
+    }
+  };
+
+  const handleDeletePhoto = async () => {
+    if (!user?.id || photoLoading || !displayProfile?.profile_photo_url) return;
+    setPhotoLoading(true);
+    try {
+      const result = await ProfilePhotoService.removeProfilePhoto(
+        user.id,
+        displayProfile.profile_photo_url,
+      );
+      if (!result.success) {
+        Alert.alert(t('common.error'), result.error || 'Failed to remove photo');
+        return;
+      }
+
+      await refreshProfile();
+      setDisplayProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              profile_photo_url: null,
+            }
+          : prev,
+      );
+    } catch {
+      Alert.alert(t('common.error'), 'Failed to remove photo');
+    } finally {
+      setPhotoLoading(false);
+    }
+  };
+
   const previewDateTime = useMemo(() => {
     const now = new Date();
     try {
-      return new Intl.DateTimeFormat(form.language || 'en-US', {
+      return new Intl.DateTimeFormat('en-US', {
         dateStyle: 'full',
         timeStyle: 'short',
       }).format(now);
     } catch {
       return now.toLocaleString();
     }
-  }, [form.language]);
+  }, []);
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.scrollView}>
-        <View style={styles.container}>
-          <View style={styles.headerRow}>
-            {canGoBack ? (
-              <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.8}>
-                <Ionicons name="chevron-back" size={20} color="#374151" />
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.backSpacer} />
-            )}
-            <Text style={styles.headerTitle}>{t('settings.title')}</Text>
-            <View style={styles.backSpacer} />
-          </View>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        <View style={[styles.container, { paddingTop: Math.max(insets.top, 10) }]}>
+          <PageHeader title={t('settings.title')} />
           <Text style={styles.subtitle}>{t('settings.subtitle')}</Text>
 
           <Card style={styles.sectionCard}>
             <Card.Content>
               <Text style={styles.sectionTitle}>{t('settings.section.account')}</Text>
-              <Text style={styles.profileName}>{profile?.name || 'User'}</Text>
-              <Text style={styles.profileMeta}>{profile?.email || t('settings.noEmail')}</Text>
-              <Text style={styles.profileMeta}>{t('settings.role')}: {profile?.role || t('settings.unknown')}</Text>
+              <View style={styles.profileTopRow}>
+                <View>
+                  {displayProfile?.profile_photo_url ? (
+                    <Image source={{ uri: displayProfile.profile_photo_url }} style={styles.avatarImage} />
+                  ) : (
+                    <View style={styles.avatarFallback}>
+                      <Text style={styles.avatarFallbackText}>
+                        {(displayProfile?.name?.[0] || displayProfile?.email?.[0] || 'U').toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                  <TouchableOpacity
+                    style={styles.photoButton}
+                    onPress={handleUploadPhoto}
+                    activeOpacity={0.9}
+                    disabled={photoLoading}
+                  >
+                    <Ionicons name="camera" size={14} color="#ffffff" />
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.profileInfoCol}>
+                  <Text style={styles.profileName}>{displayProfile?.name || 'User'}</Text>
+                  <Text style={styles.profileMeta}>{displayProfile?.email || t('settings.noEmail')}</Text>
+                  <Text style={styles.profileMeta}>
+                    {t('settings.role')}: {displayProfile?.role || t('settings.unknown')}
+                  </Text>
+                </View>
+              </View>
+              {displayProfile?.profile_photo_url ? (
+                <TouchableOpacity onPress={handleDeletePhoto} disabled={photoLoading} activeOpacity={0.7}>
+                  <Text style={styles.removePhotoText}>Remove photo</Text>
+                </TouchableOpacity>
+              ) : null}
             </Card.Content>
           </Card>
 
@@ -192,14 +264,6 @@ export default function Settings() {
           <Card style={styles.sectionCard}>
             <Card.Content>
               <Text style={styles.sectionTitle}>{t('settings.section.localization')}</Text>
-
-              <Text style={styles.fieldLabel}>{t('settings.language')}</Text>
-              <Pressable
-                style={styles.selectButton}
-                onPress={() => setLanguageMenuVisible(true)}
-              >
-                <Text style={styles.selectButtonText}>{getLanguageLabel(form.language)}</Text>
-              </Pressable>
 
               <Text style={styles.fieldLabel}>{t('settings.timezone')}</Text>
               <Pressable
@@ -240,31 +304,6 @@ export default function Settings() {
       </ScrollView>
 
       <Modal
-        visible={languageMenuVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setLanguageMenuVisible(false)}
-      >
-        <Pressable style={styles.modalBackdrop} onPress={() => setLanguageMenuVisible(false)}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{t('settings.selectLanguage')}</Text>
-            {LANGUAGE_OPTIONS.map((option) => (
-              <Pressable
-                key={option.label}
-                style={styles.modalItem}
-                onPress={() => {
-                  setForm((prev) => ({ ...prev, language: option.locale }));
-                  setLanguageMenuVisible(false);
-                }}
-              >
-                <Text style={styles.modalItemText}>{option.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </Pressable>
-      </Modal>
-
-      <Modal
         visible={timezoneMenuVisible}
         transparent
         animationType="fade"
@@ -300,33 +339,12 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  scrollContent: {
+    flexGrow: 1,
+  },
   container: {
     padding: 20,
     gap: 14,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  backButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#f3f4f6',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  backSpacer: {
-    width: 34,
-    height: 34,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111111',
   },
   title: {
     fontSize: 28,
@@ -355,10 +373,59 @@ const styles = StyleSheet.create({
     color: '#111111',
     marginBottom: 4,
   },
+  profileTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 8,
+  },
+  profileInfoCol: {
+    flex: 1,
+  },
+  avatarFallback: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 1,
+    borderColor: '#e5dccd',
+    backgroundColor: '#f2efe9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarFallbackText: {
+    fontSize: 32,
+    color: '#1f2937',
+    fontWeight: '500',
+  },
+  avatarImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 1,
+    borderColor: '#e5dccd',
+  },
+  photoButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#ea580c',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'absolute',
+    right: -2,
+    top: -2,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
   profileMeta: {
     fontSize: 14,
     color: '#6b7280',
     marginBottom: 2,
+  },
+  removePhotoText: {
+    color: '#dc2626',
+    fontSize: 13,
+    fontWeight: '500',
   },
   switchRow: {
     flexDirection: 'row',

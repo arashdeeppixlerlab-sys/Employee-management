@@ -1,12 +1,6 @@
-export type SupportedLocale = 'en-US' | 'hi-IN' | 'es-ES';
+export type SupportedLocale = 'en-US';
 
 export const FALLBACK_LOCALE: SupportedLocale = 'en-US';
-
-export const LANGUAGE_OPTIONS: Array<{ label: string; locale: SupportedLocale }> = [
-  { label: 'English', locale: 'en-US' },
-  { label: 'Hindi', locale: 'hi-IN' },
-  { label: 'Spanish', locale: 'es-ES' },
-];
 
 type TranslationMap = Record<string, string>;
 
@@ -33,17 +27,15 @@ const enUS: TranslationMap = {
   'settings.openSecurity': 'Open Security',
   'settings.emailNotifications': 'Email Notifications',
   'settings.pushNotifications': 'Push Notifications',
-  'settings.language': 'Language',
   'settings.timezone': 'Timezone',
   'settings.preview': 'Preview',
-  'settings.selectLanguage': 'Select Language',
   'settings.selectTimezone': 'Select Timezone',
   'settings.saveSettings': 'Save Settings',
   'settings.role': 'Role',
   'settings.noEmail': 'No email',
   'settings.unknown': 'Unknown',
   'settings.shortcutDescription': 'Open password settings directly from here.',
-  'settings.validationRequired': 'Language and timezone are required',
+  'settings.validationRequired': 'Timezone is required',
   'settings.updatedSuccess': 'Settings updated successfully',
   'settings.saveFailed': 'Failed to save settings',
   'settings.userNotAuthenticated': 'User not authenticated',
@@ -62,69 +54,8 @@ const enUS: TranslationMap = {
   'security.changedSuccess': 'Password changed successfully',
 };
 
-const hiIN: TranslationMap = {
-  ...enUS,
-  'app.login': 'लॉगिन',
-  'app.employeeDashboard': 'कर्मचारी डैशबोर्ड',
-  'app.uploadDocument': 'दस्तावेज़ अपलोड करें',
-  'app.helpSupport': 'सहायता और समर्थन',
-  'app.termsPrivacy': 'नियम और गोपनीयता',
-  'app.reports': 'रिपोर्ट्स',
-  'settings.title': 'सेटिंग्स',
-  'settings.subtitle': 'खाता और ऐप प्राथमिकताएं प्रबंधित करें',
-  'settings.section.notifications': 'सूचनाएं',
-  'settings.section.localization': 'भाषा और क्षेत्र',
-  'settings.language': 'भाषा',
-  'settings.timezone': 'समय क्षेत्र',
-  'settings.saveSettings': 'सेटिंग्स सहेजें',
-  'security.title': 'सुरक्षा',
-  'security.section.changePassword': 'पासवर्ड बदलें',
-  'security.currentPassword': 'वर्तमान पासवर्ड',
-  'security.newPassword': 'नया पासवर्ड',
-  'security.confirmNewPassword': 'नए पासवर्ड की पुष्टि करें',
-  'security.changePassword': 'पासवर्ड बदलें',
-};
-
-const esES: TranslationMap = {
-  ...enUS,
-  'app.login': 'Iniciar sesion',
-  'app.employeeDashboard': 'Panel de empleado',
-  'app.uploadDocument': 'Subir documento',
-  'app.helpSupport': 'Ayuda y soporte',
-  'app.termsPrivacy': 'Terminos y privacidad',
-  'app.reports': 'Reportes',
-  'settings.title': 'Configuracion',
-  'settings.subtitle': 'Administra tu cuenta y preferencias de la app',
-  'settings.section.notifications': 'Notificaciones',
-  'settings.section.localization': 'Idioma y region',
-  'settings.language': 'Idioma',
-  'settings.timezone': 'Zona horaria',
-  'settings.saveSettings': 'Guardar configuracion',
-  'security.title': 'Seguridad',
-  'security.section.changePassword': 'Cambiar contrasena',
-  'security.currentPassword': 'Contrasena actual',
-  'security.newPassword': 'Nueva contrasena',
-  'security.confirmNewPassword': 'Confirmar nueva contrasena',
-  'security.changePassword': 'Cambiar contrasena',
-};
-
 const dictionaries: Record<SupportedLocale, TranslationMap> = {
   'en-US': enUS,
-  'hi-IN': hiIN,
-  'es-ES': esES,
-};
-
-export const normalizeLocale = (value?: string | null): SupportedLocale => {
-  if (!value) return FALLBACK_LOCALE;
-  if (value === 'English') return 'en-US';
-  if (value === 'Hindi') return 'hi-IN';
-  if (value === 'Spanish') return 'es-ES';
-  if (value in dictionaries) return value as SupportedLocale;
-  return FALLBACK_LOCALE;
-};
-
-export const getLanguageLabel = (locale: SupportedLocale): string => {
-  return LANGUAGE_OPTIONS.find((option) => option.locale === locale)?.label ?? 'English';
 };
 
 export const translate = (locale: SupportedLocale, key: string): string => {

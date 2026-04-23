@@ -6,13 +6,12 @@ import {
   ScrollView,
   StatusBar,
   Platform,
-  TouchableOpacity,
+  Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Card,
   Button,
-  Avatar,
 } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -23,7 +22,7 @@ import { supabase } from '../../src/services/supabase/supabaseClient';
 
 export default function DashboardScreen() {
   const router = useRouter();
-  const canGoBack = router.canGoBack();
+  const insets = useSafeAreaInsets();
   const { profile } = useAuth();
   const { documents, loading, fetchDocuments } = useDocuments();
   const recentDocuments = [...documents]
@@ -90,26 +89,23 @@ export default function DashboardScreen() {
     <AuthGuard requiredRole="employee">
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 96 }]}
+        >
           <View style={styles.container}>
             {/* Professional Header */}
             <View style={styles.professionalHeader}>
               <View style={styles.headerLeft}>
-                {canGoBack && (
-                  <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={() => router.back()}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="chevron-back" size={22} color="#374151" />
-                  </TouchableOpacity>
+                {profile?.profile_photo_url ? (
+                  <Image source={{ uri: profile.profile_photo_url }} style={styles.avatarImage} />
+                ) : (
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarLabel}>
+                      {(profile?.name?.[0] || profile?.email?.[0] || 'U').toUpperCase()}
+                    </Text>
+                  </View>
                 )}
-                <Avatar.Text 
-                  size={48} 
-                  label={profile?.email?.[0]?.toUpperCase() || 'U'}
-                  style={styles.avatar}
-                  labelStyle={styles.avatarLabel}
-                />
                 <View style={styles.headerText}>
                   <Text style={styles.greeting}>Good morning!</Text>
                   <Text style={styles.userName}>
@@ -160,7 +156,7 @@ export default function DashboardScreen() {
                   
                   <Button
                     mode="outlined"
-                    onPress={() => router.push('/(tabs)/documents')}
+                    onPress={() => router.replace('/(tabs)/documents')}
                     style={styles.actionButton}
                     icon="folder"
                   >
@@ -178,7 +174,7 @@ export default function DashboardScreen() {
                     <Text style={styles.sectionTitle}>Recent Documents</Text>
                     <Button
                       mode="text"
-                      onPress={() => router.push('/(tabs)/documents')}
+                      onPress={() => router.replace('/(tabs)/documents')}
                       compact
                     >
                       View All
@@ -198,7 +194,7 @@ export default function DashboardScreen() {
                       <Button
                         mode="text"
                         icon="chevron-right"
-                        onPress={() => router.push('/(tabs)/documents')}
+                        onPress={() => router.replace('/(tabs)/documents')}
                         compact
                       />
                     </View>
@@ -269,22 +265,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  backButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#f3f4f6',
+  avatar: {
+    backgroundColor: '#2563eb',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
-  avatar: {
-    backgroundColor: '#2563eb',
+  avatarImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     marginRight: 12,
   },
   avatarLabel: {
     color: '#ffffff',
     fontWeight: '600',
+    fontSize: 22,
   },
   headerText: {
     flex: 1,

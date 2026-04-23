@@ -9,7 +9,7 @@ import {
   Alert,
   Modal,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, ActivityIndicator, Avatar, FAB, Snackbar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import type { Document as AppDocument } from '../../src/types/document';
@@ -20,6 +20,8 @@ import { supabase } from '../../src/services/supabase/supabaseClient';
 import { useFocusEffect } from 'expo-router';
 import { useRouter } from 'expo-router';
 import DocumentViewerModal from '../../src/components/DocumentViewerModal';
+import { resolveDocumentOpenUrl } from '../../src/utils/documentOpenUrl';
+import { formatDocumentDate, getDocumentFileIcon } from '../../src/utils/documentDisplay';
 
 type ProfileMini = {
   id: string;
@@ -29,6 +31,7 @@ type ProfileMini = {
 
 export default function AdminDocumentsScreen() {
   const { profile } = useAuth();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const {
     documents,
@@ -177,39 +180,6 @@ export default function AdminDocumentsScreen() {
     }, [profile?.id, fetchAdminDocuments])
   );
 
-  const formatDate = useCallback((dateString?: string | null) => {
-    if (!dateString) return 'Unknown';
-    return new Date(dateString).toLocaleDateString();
-  }, []);
-
-  const getFileIcon = useCallback((fileName?: string | null) => {
-    const extension = fileName?.split('.').pop()?.toLowerCase();
-    switch (extension) {
-      case 'pdf':
-        return 'file-pdf-box';
-      case 'doc':
-      case 'docx':
-        return 'file-word';
-      case 'xls':
-      case 'xlsx':
-        return 'file-excel';
-      case 'ppt':
-      case 'pptx':
-        return 'file-powerpoint';
-      case 'jpg':
-      case 'jpeg':
-      case 'png':
-      case 'gif':
-      case 'bmp':
-      case 'webp':
-        return 'file-image';
-      case 'txt':
-        return 'file-document';
-      default:
-        return 'file';
-    }
-  }, []);
-
   const handleRefresh = useCallback(async () => {
     try {
       setRefreshing(true);
@@ -222,78 +192,6 @@ export default function AdminDocumentsScreen() {
   const goToUpload = useCallback(() => {
     router.push('/documents/upload');
   }, [router]);
-
-  const resolveDocumentOpenUrl = useCallback(
-    async (doc: AppDocument & Record<string, any>): Promise<string | null> => {
-      const bucket = 'documents';
-      const fileUrl: string | undefined = doc?.file_url;
-      const legacyFilePath: string | undefined =
-        doc?.file_path || doc?.filePath || doc?.path;
-
-      console.log('[OPEN_DEBUG][ADMIN] Document clicked:', {
-        id: doc?.id,
-        file_name: doc?.file_name,
-        file_url: fileUrl,
-        legacyFilePath,
-      });
-
-      if (typeof fileUrl === 'string' && fileUrl.length > 0) {
-        const isHttp = fileUrl.startsWith('http://') || fileUrl.startsWith('https://');
-        if (isHttp) {
-          const publicMarker = `/storage/v1/object/public/${bucket}/`;
-          const idx = fileUrl.indexOf(publicMarker);
-          if (idx !== -1) {
-            const objectPath = fileUrl.substring(idx + publicMarker.length);
-            if (objectPath) {
-              const { data: signedData, error: signedError } =
-                await supabase.storage.from(bucket).createSignedUrl(objectPath, 60 * 60);
-
-              if (!signedError && signedData?.signedUrl) {
-                console.log('[OPEN_DEBUG][ADMIN] Using signedUrl:', signedData.signedUrl);
-                return signedData.signedUrl;
-              }
-
-              console.log('[OPEN_DEBUG][ADMIN] Signed URL creation failed, fallback:', {
-                message: signedError?.message,
-              });
-            }
-          }
-
-          console.log('[OPEN_DEBUG][ADMIN] Opening direct URL:', fileUrl);
-          return fileUrl;
-        }
-
-        const objectPath =
-          fileUrl.startsWith(`${bucket}/`) ? fileUrl.slice(bucket.length + 1) : fileUrl;
-        if (objectPath) {
-          const { data: signedData, error: signedError } =
-            await supabase.storage.from(bucket).createSignedUrl(objectPath, 60 * 60);
-          if (!signedError && signedData?.signedUrl) {
-            console.log('[OPEN_DEBUG][ADMIN] Using signedUrl from objectPath:', signedData.signedUrl);
-            return signedData.signedUrl;
-          }
-          console.log('[OPEN_DEBUG][ADMIN] Signed URL failed from objectPath:', {
-            message: signedError?.message,
-          });
-        }
-      }
-
-      if (typeof legacyFilePath === 'string' && legacyFilePath.length > 0) {
-        const { data: signedData, error: signedError } =
-          await supabase.storage.from(bucket).createSignedUrl(legacyFilePath, 60 * 60);
-        if (!signedError && signedData?.signedUrl) {
-          console.log('[OPEN_DEBUG][ADMIN] Using signedUrl from legacyFilePath:', signedData.signedUrl);
-          return signedData.signedUrl;
-        }
-        console.log('[OPEN_DEBUG][ADMIN] Signed URL failed from legacyFilePath:', {
-          message: signedError?.message,
-        });
-      }
-
-      return null;
-    },
-    [],
-  );
 
   const handleViewDocument = useCallback(
     async (doc: AppDocument) => {
@@ -349,14 +247,14 @@ export default function AdminDocumentsScreen() {
               >
                 <Avatar.Icon
                   size={40}
-                  icon={getFileIcon(item.file_name)}
+                  icon={getDocumentFileIcon(item.file_name)}
                   style={styles.documentIcon}
                 />
                 <View style={styles.documentInfo}>
                   <Text style={styles.documentName} numberOfLines={1}>
                     {item.file_name || 'Untitled'}
                   </Text>
-                  <Text style={styles.documentMeta}>{formatDate(item.created_at)}</Text>
+                  <Text style={styles.documentMeta}>{formatDocumentDate(item.created_at)}</Text>
                   <Text style={styles.documentAuthor}>Uploaded by {author}</Text>
                 </View>
               </TouchableOpacity>
@@ -380,7 +278,7 @@ export default function AdminDocumentsScreen() {
         </Card>
       );
     },
-    [formatDate, getFileIcon, handleDeleteDocument, handleViewDocument, profilesById],
+    [handleDeleteDocument, handleViewDocument, profilesById],
   );
 
   const statsCount = useMemo(() => documents.length, [documents.length]);
@@ -439,7 +337,7 @@ export default function AdminDocumentsScreen() {
                 data={documents}
                 renderItem={renderDocumentItem}
                 keyExtractor={(item) => item.id}
-                contentContainerStyle={styles.listContainer}
+                contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 120 }]}
                 refreshControl={
                   <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
                 }
@@ -465,7 +363,7 @@ export default function AdminDocumentsScreen() {
               {documents.length > 0 && (
                 <FAB
                   icon="plus"
-                  style={styles.fab}
+                  style={[styles.fab, { bottom: insets.bottom + 16 }]}
                   onPress={goToUpload}
                 />
               )}
@@ -638,7 +536,6 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     paddingHorizontal: 16,
-    paddingBottom: 100,
   },
   documentCard: {
     backgroundColor: '#ffffff',

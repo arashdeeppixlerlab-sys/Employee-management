@@ -45,37 +45,6 @@ export const useDocuments = () => {
     }
   }, [profile?.id]);
 
-  const uploadDocument = useCallback(async (file: any, fileName: string) => {
-    if (!profile?.id) {
-      setStateSafe({ error: 'User not authenticated' });
-      return { success: false, error: 'User not authenticated' };
-    }
-
-    setStateSafe({ uploading: true, error: null });
-
-    try {
-      const response = await DocumentService.uploadDocument(file, profile.id, 'employee');
-
-      if (response.success) {
-        await fetchDocuments(); // ✅ FIX count update
-        notifyDocumentsChanged({
-          scope: 'employee',
-          employeeId: profile.id,
-        });
-      } else {
-        setStateSafe({ error: response.error });
-      }
-
-      return response;
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Upload failed';
-      setStateSafe({ error: msg });
-      return { success: false, error: msg };
-    } finally {
-      setStateSafe({ uploading: false });
-    }
-  }, [profile?.id, fetchDocuments]);
-
   const fetchAdminDocuments = useCallback(async () => {
     setStateSafe({ loading: true, error: null });
 
@@ -132,10 +101,6 @@ export const useDocuments = () => {
     }
   }, [profile?.id, fetchDocuments, fetchAdminDocuments]);
 
-  const clearError = useCallback(() => {
-    setStateSafe({ error: null });
-  }, []);
-
   useEffect(() => {
     if (!profile?.id) return;
     if (profile.role === 'admin') {
@@ -176,8 +141,6 @@ export const useDocuments = () => {
     ...state,
     fetchDocuments,
     fetchAdminDocuments,
-    uploadDocument,
     deleteDocument,
-    clearError,
   };
 };

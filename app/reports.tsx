@@ -2,13 +2,10 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActivityIndicator } from 'react-native-paper';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { supabase } from '../src/services/supabase/supabaseClient';
+import PageHeader from '../src/components/PageHeader';
 
 export default function Reports() {
-  const router = useRouter();
-  const canGoBack = router.canGoBack();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({
@@ -104,17 +101,7 @@ export default function Reports() {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.scrollView}>
         <View style={styles.container}>
-          <View style={styles.headerRow}>
-            {canGoBack ? (
-              <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.8}>
-                <Ionicons name="chevron-back" size={20} color="#374151" />
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.backSpacer} />
-            )}
-            <Text style={styles.headerTitle}>Reports</Text>
-            <View style={styles.backSpacer} />
-          </View>
+          <PageHeader title="Reports" />
           {loading ? (
             <View style={styles.loadingBox}>
               <ActivityIndicator size="large" color="#2563eb" />
@@ -189,30 +176,6 @@ const styles = StyleSheet.create({
   },
   container: {
     padding: 20,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  backButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#f3f4f6',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  backSpacer: {
-    width: 34,
-    height: 34,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111111',
   },
   section: {
     marginBottom: 32,

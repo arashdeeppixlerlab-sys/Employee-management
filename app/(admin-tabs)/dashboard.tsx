@@ -8,13 +8,13 @@ import {
   Dimensions,
   StatusBar,
   Platform,
+  Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Card,
   Button,
   ActivityIndicator,
-  Avatar,
 } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -52,7 +52,7 @@ interface RecentActivity {
 export default function AdminDashboard() {
   const { profile } = useAuth();
   const router = useRouter();
-  const canGoBack = router.canGoBack();
+  const insets = useSafeAreaInsets();
   const isCompactStatusLayout = width < 430;
   const [stats, setStats] = useState<DashboardStats>({
     totalEmployees: 0,
@@ -334,22 +334,23 @@ export default function AdminDashboard() {
     <AuthGuard requiredRole="admin">
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 124 }}
+        >
           {/* Professional Admin Header */}
           <View style={styles.professionalHeader}>
             <View style={styles.headerLeft}>
-              {canGoBack && (
-                <TouchableOpacity
-                  style={styles.backButton}
-                  onPress={() => router.back()}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="chevron-back" size={22} color="#374151" />
-                </TouchableOpacity>
+              {profile?.profile_photo_url ? (
+                <Image source={{ uri: profile.profile_photo_url }} style={styles.adminAvatarImage} />
+              ) : (
+                <View style={styles.adminIconContainer}>
+                  <Text style={styles.adminAvatarLabel}>
+                    {(profile?.name?.[0] || profile?.email?.[0] || 'A').toUpperCase()}
+                  </Text>
+                </View>
               )}
-              <View style={styles.adminIconContainer}>
-                <Ionicons name="shield-checkmark-outline" size={28} color="#2563eb" />
-              </View>
               <View style={styles.headerText}>
                 <Text style={styles.adminBadge}>Administrator</Text>
                 <Text style={styles.welcomeTitle}>Welcome back, Admin</Text>
@@ -552,7 +553,6 @@ export default function AdminDashboard() {
             </Card>
           </View>
 
-          <View style={styles.footer} />
         </ScrollView>
       </SafeAreaView>
     </AuthGuard>
@@ -598,23 +598,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f3f4f6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
   adminIconContainer: {
     width: 44,
     height: 44,
-    borderRadius: 14,
-    backgroundColor: '#dbeafe',
+    borderRadius: 22,
+    backgroundColor: '#2563eb',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+  },
+  adminAvatarImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    marginRight: 12,
+  },
+  adminAvatarLabel: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: '600',
   },
   headerText: {
     flex: 1,
@@ -1022,8 +1024,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#10b981',
-  },
-  footer: {
-    height: 32,
   },
 });
