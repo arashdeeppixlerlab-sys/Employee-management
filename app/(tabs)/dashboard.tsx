@@ -23,7 +23,7 @@ import { supabase } from '../../src/services/supabase/supabaseClient';
 export default function DashboardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { profile } = useAuth();
+  const { profile, refreshProfile } = useAuth();
   const { documents, loading, fetchDocuments } = useDocuments();
   const recentDocuments = [...documents]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -37,14 +37,13 @@ export default function DashboardScreen() {
   useFocusEffect(
     React.useCallback(() => {
       fetchDocuments();
-    }, [fetchDocuments])
+      refreshProfile();
+    }, [fetchDocuments, refreshProfile])
   );
 
-  // Listen for real-time document changes to refresh counts
   useEffect(() => {
     if (!profile?.id) return;
-    
-    console.log('[EMPLOYEE DASHBOARD] Setting up real-time listener for user:', profile.id);
+
     const channel = supabase
       .channel('employee-dashboard-documents')
       .on(
@@ -55,31 +54,16 @@ export default function DashboardScreen() {
           table: 'documents',
           filter: `employee_id=eq.${profile.id}`
         },
-        (payload) => {
-          console.log('[EMPLOYEE DASHBOARD] Document change detected:', payload.eventType, payload);
-          // Refresh documents to update counts
+        () => {
           fetchDocuments();
         }
       )
-      .subscribe((status) => {
-        console.log('[EMPLOYEE DASHBOARD] Real-time subscription status:', status);
-      });
+      .subscribe();
 
     return () => {
-      console.log('[EMPLOYEE DASHBOARD] Cleaning up real-time listener');
       supabase.removeChannel(channel);
     };
   }, [profile?.id]); // Add profile dependency for proper filtering
-
-  // Fallback: Refresh documents periodically as backup
-  useEffect(() => {
-    const interval = setInterval(() => {
-      console.log('[EMPLOYEE DASHBOARD] Periodic refresh fallback');
-      fetchDocuments();
-    }, 30000); // Every 30 seconds
-
-    return () => clearInterval(interval);
-  }, [fetchDocuments]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString();
@@ -109,7 +93,7 @@ export default function DashboardScreen() {
                 <View style={styles.headerText}>
                   <Text style={styles.greeting}>Good morning!</Text>
                   <Text style={styles.userName}>
-                    {profile?.email?.split('@')[0] || 'User'}
+                    {profile?.name?.trim() || profile?.email?.split('@')[0] || 'User'}
                   </Text>
                 </View>
               </View>

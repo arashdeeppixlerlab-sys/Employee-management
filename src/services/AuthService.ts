@@ -7,9 +7,7 @@ export class AuthService {
   static async initializeAuth() {
     // Set up session listener using correct Supabase v2 pattern
     if (!this.subscription) {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-        console.log('Auth state changed:', event, session?.user?.id);
-      });
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {});
       this.subscription = subscription;
     }
   }
@@ -113,7 +111,6 @@ export class AuthService {
         error.message?.includes('Refresh Token Not Found') ||
         error.message?.includes('Invalid session')
       )) {
-        console.log('Invalid session detected, clearing auth state');
         await this.safeLogout();
         return { user: null, profile: null };
       }
@@ -143,10 +140,9 @@ export class AuthService {
 
   static async safeLogout(): Promise<void> {
     try {
-      // Clear session without throwing errors
       await supabase.auth.signOut({ scope: 'global' });
-    } catch (error) {
-      console.log('Logout error (safe to ignore):', error);
+    } catch {
+      return;
     }
   }
 

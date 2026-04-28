@@ -8,9 +8,11 @@ import {
   RefreshControl,
   Alert,
   Modal,
+  TextInput,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Card, ActivityIndicator, Avatar, FAB, Snackbar } from 'react-native-paper';
+import { Button, Card, Avatar, FAB, Snackbar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import type { Document as AppDocument } from '../../src/types/document';
 import { useDocuments } from '../../src/hooks/useDocuments';
@@ -22,6 +24,7 @@ import { useRouter } from 'expo-router';
 import DocumentViewerModal from '../../src/components/DocumentViewerModal';
 import { resolveDocumentOpenUrl } from '../../src/utils/documentOpenUrl';
 import { formatDocumentDate, getDocumentFileIcon } from '../../src/utils/documentDisplay';
+import { AdminUserManagementService } from '../../src/services/AdminUserManagementService';
 
 type ProfileMini = {
   id: string;
@@ -48,6 +51,14 @@ export default function AdminDocumentsScreen() {
   const [selectedDocument, setSelectedDocument] = useState<AppDocument | null>(null);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<AppDocument | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [fileTypeFilter, setFileTypeFilter] = useState<'all' | 'pdf' | 'image' | 'other'>('all');
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'az'>('newest');
+  const [storageUsedBytes, setStorageUsedBytes] = useState(0);
+  const [typePickerVisible, setTypePickerVisible] = useState(false);
+  const [sortPickerVisible, setSortPickerVisible] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleting, setConfirmDeleting] = useState(false);
 
   useEffect(() => {
     let isActive = true;
@@ -59,7 +70,6 @@ export default function AdminDocumentsScreen() {
           .select('id, name, email');
 
         if (profilesError) {
-          console.log('AdminDocuments profiles fetch error:', profilesError);
           return;
         }
 
@@ -72,7 +82,7 @@ export default function AdminDocumentsScreen() {
 
         setProfilesById(next);
       } catch (e) {
-        console.log('AdminDocuments profiles fetch exception:', e);
+        return;
       }
     };
 
@@ -82,61 +92,6 @@ export default function AdminDocumentsScreen() {
     };
   }, []);
 
-  // Listen for document changes and refresh document list
-  // useEffect(() => {
-  //   console.log('[ADMIN DOCUMENTS] Setting up real-time listener');
-  //   let channel: any = null;
-
-  //   const setupSubscription = () => {
-  //     try {
-  //       channel = supabase
-  //         .channel('admin-documents-updates', {
-  //           config: {
-  //             broadcast: { self: true },
-  //             presence: { key: profile?.id },
-  //           },
-  //         })
-  //         .on(
-  //           'postgres_changes',
-  //           {
-  //             event: '*',
-  //             schema: 'public',
-  //             table: 'documents',
-  //             filter: 'uploaded_by=eq.admin'
-  //           },
-  //           (payload) => {
-  //             console.log('[ADMIN DOCUMENTS] Document change detected:', payload.eventType, payload);
-  //             fetchAdminDocuments();
-  //           }
-  //         )
-  //         .subscribe((status, err) => {
-  //           console.log('[ADMIN DOCUMENTS] Real-time subscription status:', status);
-  //           if (err) {
-  //             console.error('[ADMIN DOCUMENTS] Real-time subscription error:', err);
-  //           }
-  //           if (status === 'TIMED_OUT' || status === 'CLOSED') {
-  //             console.log('[ADMIN DOCUMENTS] Connection lost, attempting to reconnect...');
-  //             setTimeout(() => {
-  //               if (channel) {
-  //                 setupSubscription();
-  //               }
-  //             }, 3000);
-  //           }
-  //         });
-  //     } catch (error) {
-  //       console.error('[ADMIN DOCUMENTS] Failed to setup real-time subscription:', error);
-  //     }
-  //   };
-
-  //   setupSubscription();
-
-  //   return () => {
-  //     console.log('[ADMIN DOCUMENTS] Cleaning up real-time listener');
-  //     if (channel) {
-  //       supabase.removeChannel(channel).catch(console.error);
-  //     }
-  //   };
-  // }, [profile?.id, fetchAdminDocuments]);
 
   useEffect(() => {
     if (!profile?.id) return;
@@ -152,13 +107,10 @@ export default function AdminDocumentsScreen() {
           filter: 'uploaded_by=eq.admin',
         },
         (payload) => {
-          console.log('[ADMIN] change:', payload.eventType);
           fetchAdminDocuments();
         }
       )
-      .subscribe((status) => {
-        console.log('[ADMIN] status:', status);
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
@@ -171,6 +123,20 @@ export default function AdminDocumentsScreen() {
       fetchAdminDocuments();
     }
   }, [profile?.id, fetchAdminDocuments]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchStorage = async () => {
+      const dashboardStats = await AdminUserManagementService.getDashboardStats();
+      if (isMounted && dashboardStats.success) {
+        setStorageUsedBytes(dashboardStats.storageBytes);
+      }
+    };
+    fetchStorage();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -197,7 +163,6 @@ export default function AdminDocumentsScreen() {
     async (doc: AppDocument) => {
       const resolvedUrl = await resolveDocumentOpenUrl(doc as AppDocument & Record<string, any>);
       if (!resolvedUrl) {
-        console.log('[VIEW_DEBUG][ADMIN] No resolvable URL for doc:', doc);
         Alert.alert('Error', 'Document URL not available');
         return;
       }
@@ -218,14 +183,21 @@ export default function AdminDocumentsScreen() {
 
   const confirmDelete = useCallback(async () => {
     if (!documentToDelete) return;
-    
-    const result = await deleteDocument(documentToDelete.id);
-    if (!result?.success) {
-      Alert.alert('Error', result?.error || 'Delete failed');
+    if (confirmDeleting) return;
+    setConfirmDeleting(true);
+    setDeletingId(documentToDelete.id);
+    try {
+      const result = await deleteDocument(documentToDelete.id);
+      if (!result?.success) {
+        Alert.alert('Error', result?.error || 'Delete failed');
+      }
+      setDeleteConfirmVisible(false);
+      setDocumentToDelete(null);
+    } finally {
+      setConfirmDeleting(false);
+      setDeletingId(null);
     }
-    setDeleteConfirmVisible(false);
-    setDocumentToDelete(null);
-  }, [documentToDelete, deleteDocument]);
+  }, [documentToDelete, deleteDocument, confirmDeleting]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirmVisible(false);
@@ -268,6 +240,7 @@ export default function AdminDocumentsScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.actionTouchable}
+                  disabled={deletingId === item.id}
                   onPress={() => handleDeleteDocument(item)}
                 >
                   <Ionicons name="trash-outline" size={20} color="#ef4444" />
@@ -278,10 +251,50 @@ export default function AdminDocumentsScreen() {
         </Card>
       );
     },
-    [handleDeleteDocument, handleViewDocument, profilesById],
+    [handleDeleteDocument, handleViewDocument, profilesById, deletingId],
   );
 
   const statsCount = useMemo(() => documents.length, [documents.length]);
+  const formatStorageSize = (bytes: number) => {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 MB';
+    const mb = bytes / (1024 * 1024);
+    if (mb < 1024) return `${mb.toFixed(1)} MB`;
+    return `${(mb / 1024).toFixed(2)} GB`;
+  };
+  const filteredDocuments = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const next = documents.filter((doc) => {
+      const fileName = (doc.file_name || '').toLowerCase();
+      const matchesSearch = query.length === 0 || fileName.includes(query);
+      if (!matchesSearch) return false;
+      if (fileTypeFilter === 'all') return true;
+      if (fileTypeFilter === 'pdf') return fileName.endsWith('.pdf');
+      if (fileTypeFilter === 'image') return /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(fileName);
+      return !fileName.endsWith('.pdf') && !/\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(fileName);
+    });
+    return next.sort((a, b) => {
+      if (sortBy === 'az') {
+        return (a.file_name || '').localeCompare(b.file_name || '');
+      }
+      const aTime = new Date(a.created_at).getTime();
+      const bTime = new Date(b.created_at).getTime();
+      return sortBy === 'oldest' ? aTime - bTime : bTime - aTime;
+    });
+  }, [documents, searchQuery, fileTypeFilter, sortBy]);
+
+  const skeletonCards = Array.from({ length: 4 }, (_, index) => (
+    <Card key={`skeleton-${index}`} style={styles.documentCard}>
+      <Card.Content style={styles.cardContent}>
+        <View style={styles.skeletonRow}>
+          <View style={styles.skeletonIcon} />
+          <View style={styles.skeletonTextWrap}>
+            <View style={styles.skeletonLineLg} />
+            <View style={styles.skeletonLineSm} />
+          </View>
+        </View>
+      </Card.Content>
+    </Card>
+  ));
 
   return (
     <AuthGuard requiredRole="admin">
@@ -297,9 +310,8 @@ export default function AdminDocumentsScreen() {
           </Snackbar>
 
           {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#2563eb" />
-              <Text style={styles.loadingText}>Loading documents...</Text>
+            <View style={[styles.listContainer, { paddingBottom: insets.bottom + 120 }]}>
+              {skeletonCards}
             </View>
           ) : (
             <>
@@ -310,9 +322,44 @@ export default function AdminDocumentsScreen() {
                   </View>
                   <View style={styles.headerText}>
                     <Text style={styles.title}>Documents</Text>
-                    <Text style={styles.subtitle}>{documents.length} documents</Text>
+                    <Text style={styles.subtitle}>{filteredDocuments.length} documents</Text>
                   </View>
                 </View>
+              </View>
+
+              <View style={styles.searchContainer}>
+                <TextInput
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Search documents..."
+                  placeholderTextColor="#9ca3af"
+                  style={styles.searchInput}
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity style={styles.searchClearButton} onPress={() => setSearchQuery('')}>
+                    <Ionicons name="close-circle" size={18} color="#9ca3af" />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <View style={styles.controlsRow}>
+                <TouchableOpacity style={styles.controlButton} onPress={() => setTypePickerVisible(true)}>
+                  <Text style={styles.controlLabel}>Type: {fileTypeFilter === 'all' ? 'All' : fileTypeFilter === 'image' ? 'Images' : fileTypeFilter.toUpperCase()}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.controlButton} onPress={() => setSortPickerVisible(true)}>
+                  <Text style={styles.controlLabel}>Sort: {sortBy === 'az' ? 'A-Z' : sortBy === 'newest' ? 'Newest' : 'Oldest'}</Text>
+                </TouchableOpacity>
+                {(fileTypeFilter !== 'all' || sortBy !== 'newest') && (
+                  <TouchableOpacity
+                    style={styles.controlClearButton}
+                    onPress={() => {
+                      setFileTypeFilter('all');
+                      setSortBy('newest');
+                    }}
+                  >
+                    <Text style={styles.controlClearText}>Clear</Text>
+                  </TouchableOpacity>
+                )}
               </View>
 
               <View style={styles.statsContainer}>
@@ -327,14 +374,14 @@ export default function AdminDocumentsScreen() {
                 <Card style={styles.statCard}>
                   <View style={styles.statContent}>
                     <Ionicons name="cloud-upload-outline" size={24} color="#10b981" />
-                    <Text style={styles.statNumber}>--</Text>
+                    <Text style={styles.statNumber}>{formatStorageSize(storageUsedBytes)}</Text>
                     <Text style={styles.statLabel}>Storage Used</Text>
                   </View>
                 </Card>
               </View>
 
               <FlatList
-                data={documents}
+                data={filteredDocuments}
                 renderItem={renderDocumentItem}
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 120 }]}
@@ -344,10 +391,27 @@ export default function AdminDocumentsScreen() {
                 ListEmptyComponent={
                   <View style={styles.emptyContainer}>
                     <Ionicons name="document-outline" size={64} color="#d1d5db" />
-                    <Text style={styles.emptyTitle}>No documents yet</Text>
-                    <Text style={styles.emptySubtitle}>
-                      Upload your first document to get started
+                    <Text style={styles.emptyTitle}>
+                      {searchQuery || fileTypeFilter !== 'all' ? 'No matching documents' : 'No documents yet'}
                     </Text>
+                    <Text style={styles.emptySubtitle}>
+                      {searchQuery || fileTypeFilter !== 'all'
+                        ? 'Try a different search or clear filters.'
+                        : 'Upload your first document to get started.'}
+                    </Text>
+                    <Text style={styles.refreshHint}>Pull down to refresh.</Text>
+                    {(searchQuery || fileTypeFilter !== 'all') && (
+                      <Button
+                        mode="outlined"
+                        onPress={() => {
+                          setSearchQuery('');
+                          setFileTypeFilter('all');
+                        }}
+                        style={styles.clearFilterButton}
+                      >
+                        Clear Filters
+                      </Button>
+                    )}
                     <Button
                       mode="contained"
                       onPress={goToUpload}
@@ -360,7 +424,7 @@ export default function AdminDocumentsScreen() {
                 showsVerticalScrollIndicator={false}
               />
 
-              {documents.length > 0 && (
+              {filteredDocuments.length > 0 && (
                 <FAB
                   icon="plus"
                   style={[styles.fab, { bottom: insets.bottom + 16 }]}
@@ -376,6 +440,53 @@ export default function AdminDocumentsScreen() {
             fileName={selectedDocument?.file_name}
             fileUrl={selectedDocument?.file_url}
           />
+
+          <Modal visible={typePickerVisible} transparent animationType="fade" onRequestClose={() => setTypePickerVisible(false)}>
+            <Pressable style={styles.modalBackdrop} onPress={() => setTypePickerVisible(false)}>
+              <View style={styles.modalCard}>
+                {[
+                  { key: 'all', label: 'All' },
+                  { key: 'pdf', label: 'PDF' },
+                  { key: 'image', label: 'Images' },
+                  { key: 'other', label: 'Other' },
+                ].map((filter) => (
+                  <Pressable
+                    key={filter.key}
+                    style={styles.modalItem}
+                    onPress={() => {
+                      setFileTypeFilter(filter.key as 'all' | 'pdf' | 'image' | 'other');
+                      setTypePickerVisible(false);
+                    }}
+                  >
+                    <Text style={styles.modalItemText}>{filter.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </Pressable>
+          </Modal>
+
+          <Modal visible={sortPickerVisible} transparent animationType="fade" onRequestClose={() => setSortPickerVisible(false)}>
+            <Pressable style={styles.modalBackdrop} onPress={() => setSortPickerVisible(false)}>
+              <View style={styles.modalCard}>
+                {[
+                  { key: 'newest', label: 'Newest' },
+                  { key: 'oldest', label: 'Oldest' },
+                  { key: 'az', label: 'A-Z' },
+                ].map((sort) => (
+                  <Pressable
+                    key={sort.key}
+                    style={styles.modalItem}
+                    onPress={() => {
+                      setSortBy(sort.key as 'newest' | 'oldest' | 'az');
+                      setSortPickerVisible(false);
+                    }}
+                  >
+                    <Text style={styles.modalItemText}>{sort.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </Pressable>
+          </Modal>
 
           <Modal
             visible={deleteConfirmVisible}
@@ -424,10 +535,11 @@ export default function AdminDocumentsScreen() {
                   <TouchableOpacity
                     style={styles.deleteButtonEnhanced}
                     onPress={confirmDelete}
+                    disabled={confirmDeleting}
                     activeOpacity={0.8}
                   >
                     <Ionicons name="trash-outline" size={18} color="#ffffff" style={styles.deleteButtonIcon} />
-                    <Text style={styles.deleteButtonText}>Delete</Text>
+                    <Text style={styles.deleteButtonText}>{confirmDeleting ? 'Deleting...' : 'Delete'}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -509,6 +621,55 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 16,
   },
+  searchContainer: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+  },
+  searchInput: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    color: '#111111',
+    fontSize: 14,
+  },
+  searchClearButton: {
+    position: 'absolute',
+    right: 12,
+    top: 11,
+  },
+  controlsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  controlButton: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  controlLabel: {
+    color: '#374151',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  controlClearButton: {
+    marginLeft: 'auto',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  controlClearText: {
+    color: '#2563eb',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   statCard: {
     flex: 1,
     backgroundColor: '#ffffff',
@@ -583,6 +744,33 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#9ca3af',
   },
+  skeletonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  skeletonIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#e5e7eb',
+    marginRight: 12,
+  },
+  skeletonTextWrap: {
+    flex: 1,
+    gap: 8,
+  },
+  skeletonLineLg: {
+    height: 12,
+    width: '70%',
+    borderRadius: 6,
+    backgroundColor: '#e5e7eb',
+  },
+  skeletonLineSm: {
+    height: 10,
+    width: '45%',
+    borderRadius: 5,
+    backgroundColor: '#f3f4f6',
+  },
   documentActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -614,6 +802,35 @@ const styles = StyleSheet.create({
   },
   uploadButton: {
     paddingHorizontal: 24,
+  },
+  clearFilterButton: {
+    marginBottom: 12,
+  },
+  refreshHint: {
+    fontSize: 12,
+    color: '#9ca3af',
+    marginBottom: 12,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  modalItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  modalItemText: {
+    fontSize: 15,
+    color: '#111111',
   },
   fab: {
     position: 'absolute',

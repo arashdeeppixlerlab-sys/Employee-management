@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Modal, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { IconButton } from 'react-native-paper';
 import { WebView } from 'react-native-webview';
 
@@ -25,6 +25,16 @@ export default function DocumentViewerModal({
 }: DocumentViewerModalProps) {
   const showImage = isImageFile(fileName) || isImageFile(fileUrl);
   const safeUrl = fileUrl || '';
+  const isWeb = Platform.OS === 'web';
+
+  const openInBrowser = async () => {
+    if (!safeUrl) return;
+    try {
+      await Linking.openURL(safeUrl);
+    } catch {
+      // Ignore openURL errors, UI already communicates loading/availability.
+    }
+  };
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -46,6 +56,21 @@ export default function DocumentViewerModal({
             <View style={styles.loadingContainer}>
               <Text style={styles.loadingText}>Document URL not available</Text>
             </View>
+          ) : isWeb ? (
+            showImage ? (
+              <View style={styles.webImageContainer}>
+                <Image source={{ uri: safeUrl }} style={styles.webImage} resizeMode="contain" />
+              </View>
+            ) : (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>
+                  Document preview is not supported in-app on web.
+                </Text>
+                <TouchableOpacity style={styles.openButton} onPress={openInBrowser}>
+                  <Text style={styles.openButtonText}>Open in new tab</Text>
+                </TouchableOpacity>
+              </View>
+            )
           ) : (
             <WebView
               source={
@@ -132,5 +157,27 @@ const styles = StyleSheet.create({
     marginTop: 12,
     color: '#d1d5db',
     fontSize: 14,
+    textAlign: 'center',
+  },
+  webImageContainer: {
+    flex: 1,
+    backgroundColor: '#111111',
+    padding: 12,
+  },
+  webImage: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  openButton: {
+    marginTop: 14,
+    backgroundColor: '#2563eb',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  openButtonText: {
+    color: '#ffffff',
+    fontWeight: '600',
   },
 });

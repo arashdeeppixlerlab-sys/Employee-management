@@ -69,16 +69,12 @@ export const useDocuments = () => {
     if (!profile?.id) return;
 
     try {
-      console.log('[HOOKS] Deleting document:', documentId);
       const res = await DocumentService.deleteDocument(documentId, profile.id, profile.role);
 
       if (res.success) {
-        console.log('[HOOKS] Delete successful, updating UI state');
-        // Immediately remove from UI state for instant feedback
         setStateSafe(prev => ({
           documents: prev.documents.filter(doc => doc.id !== documentId)
         }));
-        // Then refetch to ensure consistency - use appropriate fetch method
         if (profile?.role === 'admin') {
           await fetchAdminDocuments();
           notifyDocumentsChanged({ scope: 'admin' });

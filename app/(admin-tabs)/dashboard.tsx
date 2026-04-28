@@ -17,7 +17,7 @@ import {
   ActivityIndicator,
 } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { supabase } from '../../src/services/supabase/supabaseClient';
 import AuthGuard from '../../src/components/AuthGuard';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -50,7 +50,7 @@ interface RecentActivity {
 }
 
 export default function AdminDashboard() {
-  const { profile } = useAuth();
+  const { profile, refreshProfile } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const isCompactStatusLayout = width < 430;
@@ -184,61 +184,12 @@ export default function AdminDashboard() {
     fetchDashboardData();
   }, []);
 
-  // Listen for document changes and refresh dashboard
-  // useEffect(() => {
-  //   console.log('[ADMIN DASHBOARD] Setting up real-time listener');
-  //   let channel: any = null;
+  useFocusEffect(
+    React.useCallback(() => {
+      refreshProfile();
+    }, [refreshProfile])
+  );
 
-  //   const setupSubscription = () => {
-  //     try {
-  //       channel = supabase
-  //         .channel('admin-dashboard-documents', {
-  //           config: {
-  //             broadcast: { self: true },
-  //             presence: { key: profile?.id },
-  //           },
-  //         })
-  //         .on(
-  //           'postgres_changes',
-  //           {
-  //             event: '*',
-  //             schema: 'public',
-  //             table: 'documents',
-  //             filter: 'uploaded_by=eq.admin',
-  //           },
-  //           (payload) => {
-  //             console.log('[ADMIN DASHBOARD] Document change detected:', payload.eventType, payload);
-  //             fetchDashboardData();
-  //           }
-  //         )
-  //         .subscribe((status, err) => {
-  //           console.log('[ADMIN DASHBOARD] Real-time subscription status:', status);
-  //           if (err) {
-  //             console.error('[ADMIN DASHBOARD] Real-time subscription error:', err);
-  //           }
-  //           if (status === 'TIMED_OUT' || status === 'CLOSED') {
-  //             console.log('[ADMIN DASHBOARD] Connection lost, attempting to reconnect...');
-  //             setTimeout(() => {
-  //               if (channel) {
-  //                 setupSubscription();
-  //               }
-  //             }, 3000);
-  //           }
-  //         });
-  //     } catch (error) {
-  //       console.error('[ADMIN DASHBOARD] Failed to setup real-time subscription:', error);
-  //     }
-  //   };
-
-  //   setupSubscription();
-
-  //   return () => {
-  //     console.log('[ADMIN DASHBOARD] Cleaning up real-time listener');
-  //     if (channel) {
-  //       supabase.removeChannel(channel).catch(console.error);
-  //     }
-  //   };
-  // }, [profile?.id, fetchDashboardData]);
 
   useEffect(() => {
     if (!profile?.id) return;
@@ -252,29 +203,16 @@ export default function AdminDashboard() {
           schema: 'public',
           table: 'documents',
         },
-        (payload) => {
-          console.log('[ADMIN] change:', payload.eventType);
+        () => {
           fetchDashboardData();
         }
       )
-      .subscribe((status) => {
-        console.log('[ADMIN] status:', status);
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, [profile?.id]); // 🚨 REMOVE fetchDashboardData
-
-  // Fallback: Refresh dashboard data periodically as backup
-  useEffect(() => {
-    const interval = setInterval(() => {
-      console.log('[ADMIN DASHBOARD] Periodic refresh fallback');
-      fetchDashboardData();
-    }, 30000); // Every 30 seconds
-
-    return () => clearInterval(interval);
-  }, []);
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -353,7 +291,9 @@ export default function AdminDashboard() {
               )}
               <View style={styles.headerText}>
                 <Text style={styles.adminBadge}>Administrator</Text>
-                <Text style={styles.welcomeTitle}>Welcome back, Admin</Text>
+                <Text style={styles.welcomeTitle}>
+                  Welcome back, {profile?.name?.trim() || 'Admin'}
+                </Text>
                 <Text style={styles.welcomeSubtitle}>
                   Manage your system efficiently
                 </Text>

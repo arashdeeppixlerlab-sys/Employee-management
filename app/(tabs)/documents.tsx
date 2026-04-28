@@ -8,6 +8,9 @@ import {
   Alert,
   ActivityIndicator,
   StatusBar,
+  TextInput,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -38,6 +41,13 @@ export default function DocumentsTabScreen() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [activeTab, setActiveTab] = useState<'my' | 'office'>('my');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [fileTypeFilter, setFileTypeFilter] = useState<'all' | 'pdf' | 'image' | 'other'>('all');
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'az'>('newest');
+  const [typePickerVisible, setTypePickerVisible] = useState(false);
+  const [sortPickerVisible, setSortPickerVisible] = useState(false);
+  const [deletingIds, setDeletingIds] = useState<string[]>([]);
+  const [deletingBatch, setDeletingBatch] = useState(false);
   
   const {
     documents,
@@ -55,9 +65,29 @@ export default function DocumentsTabScreen() {
     return documents.filter((doc: any) => doc.uploaded_by !== 'admin');
   }, [documents, isEmployee, activeTab]);
 
-  // Fetch documents on component mount
+  const filteredDocuments = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const next = visibleDocuments.filter((doc: any) => {
+      const fileName = (doc.file_name || '').toLowerCase();
+      const matchesSearch = query.length === 0 || fileName.includes(query);
+      if (!matchesSearch) return false;
+
+      if (fileTypeFilter === 'all') return true;
+      if (fileTypeFilter === 'pdf') return fileName.endsWith('.pdf');
+      if (fileTypeFilter === 'image') return /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(fileName);
+      return !fileName.endsWith('.pdf') && !/\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(fileName);
+    });
+    return next.sort((a: any, b: any) => {
+      if (sortBy === 'az') {
+        return (a.file_name || '').localeCompare(b.file_name || '');
+      }
+      const aTime = new Date(a.created_at).getTime();
+      const bTime = new Date(b.created_at).getTime();
+      return sortBy === 'oldest' ? aTime - bTime : bTime - aTime;
+    });
+  }, [visibleDocuments, searchQuery, fileTypeFilter, sortBy]);
+
   useEffect(() => {
-    console.log('[MOUNT_DEBUG] Component mounted, fetching documents');
     fetchDocuments();
   }, [fetchDocuments]);
 
@@ -69,12 +99,9 @@ export default function DocumentsTabScreen() {
 
   const handleViewDocument = async (document: any) => {
     try {
-      console.log('[VIEW_DEBUG] Viewing document:', document.file_name);
-
       const documentUrl = await resolveDocumentOpenUrl(document);
 
       if (!documentUrl) {
-        console.log('[VIEW_DEBUG] No documentUrl resolved for:', document);
         Alert.alert('Error', 'Document URL not available');
         return;
       }
@@ -82,11 +109,8 @@ export default function DocumentsTabScreen() {
       setLoadingPreview(true);
       setSelectedDocument({ ...document, file_url: documentUrl });
 
-      const fileName = (document.file_name || document.name || '').toLowerCase();
-      
       setImageModalVisible(true);
     } catch (err) {
-      console.log('[VIEW_DEBUG] View error:', err);
       Alert.alert('Error', 'Failed to open document');
     } finally {
       setLoadingPreview(false);
@@ -115,14 +139,12 @@ export default function DocumentsTabScreen() {
 
   const handleMultiSelectDelete = async () => {
   if (selectedIds.length === 0) return;
+  if (deletingBatch) return;
 
   const confirmDelete = async () => {
     try {
-      console.log('[MULTI_DELETE_DEBUG] Deleting:', selectedIds);
-
+      setDeletingBatch(true);
       await Promise.all(selectedIds.map(id => deleteDocument(id)));
-
-      console.log('[MULTI_DELETE_DEBUG] Batch delete done');
 
       setSelectedIds([]);
       setMultiSelectMode(false);
@@ -130,8 +152,9 @@ export default function DocumentsTabScreen() {
       await fetchDocuments(); // 🔥 FORCE REFRESH
 
     } catch (error) {
-      console.error('[MULTI_DELETE_DEBUG] Error:', error);
       Alert.alert('Error', 'Failed to delete documents');
+    } finally {
+      setDeletingBatch(false);
     }
   };
 
@@ -146,20 +169,17 @@ export default function DocumentsTabScreen() {
 };
 
   const handleDeleteDocument = async (document: any) => {
-  console.log('[UI] Delete clicked with ID:', document.id);
-
+  if (deletingIds.includes(document.id)) return;
   const confirmDelete = async () => {
-    console.log('[DELETE_DEBUG] User confirmed delete');
-
+    setDeletingIds((prev) => [...prev, document.id]);
     const result = await deleteDocument(document.id);
-
-    console.log('[DELETE_DEBUG] Delete result:', result);
 
     if (result.success) {
       await fetchDocuments(); // 🔥 FORCE REFRESH HERE
     } else {
       Alert.alert('Error', result.error || 'Delete failed');
     }
+    setDeletingIds((prev) => prev.filter((id) => id !== document.id));
   };
 
   const confirmed = await confirmAction({
@@ -175,6 +195,7 @@ export default function DocumentsTabScreen() {
   const renderDocumentCard = ({ item }: { item: any }) => {
     const canDeleteDocument =
       profile?.role === 'admin' || item.uploaded_by !== 'admin';
+    const isDeletingItem = deletingIds.includes(item.id);
 
     return (
       <Card style={styles.documentCard}>
@@ -234,6 +255,7 @@ export default function DocumentsTabScreen() {
                   icon="delete"
                   size={20}
                   iconColor="#ef4444"
+                  disabled={isDeletingItem || deletingBatch}
                   onPress={() => multiSelectMode ? handleMultiSelectDelete() : handleDeleteDocument(item)}
                 />
               )}
@@ -244,18 +266,19 @@ export default function DocumentsTabScreen() {
     );
   };
 
-  if (loading) {
-    return (
-      <AuthGuard>
-        <SafeAreaView style={styles.safeArea}>
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#2563eb" />
-            <Text style={styles.loadingText}>Loading documents...</Text>
+  const skeletonCards = Array.from({ length: 4 }, (_, index) => (
+    <Card key={`skeleton-${index}`} style={styles.documentCard}>
+      <Card.Content style={styles.cardContent}>
+        <View style={styles.skeletonRow}>
+          <View style={styles.skeletonIcon} />
+          <View style={styles.skeletonTextWrap}>
+            <View style={styles.skeletonLineLg} />
+            <View style={styles.skeletonLineSm} />
           </View>
-        </SafeAreaView>
-      </AuthGuard>
-    );
-  }
+        </View>
+      </Card.Content>
+    </Card>
+  ));
 
   return (
     <AuthGuard>
@@ -270,7 +293,7 @@ export default function DocumentsTabScreen() {
               </View>
               <View style={styles.headerText}>
                 <Text style={styles.title}>My Documents</Text>
-                <Text style={styles.subtitle}>{visibleDocuments.length} documents</Text>
+                <Text style={styles.subtitle}>{filteredDocuments.length} documents</Text>
               </View>
             </View>
             <View style={styles.headerActions}>
@@ -314,36 +337,93 @@ export default function DocumentsTabScreen() {
             </View>
           )}
 
-          {visibleDocuments.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="document-outline" size={64} color="#d1d5db" />
-              <Text style={styles.emptyTitle}>
-                {isEmployee && activeTab === 'office' ? 'No office documents yet' : 'No documents yet'}
-              </Text>
-              <Text style={styles.emptySubtitle}>
-                {isEmployee && activeTab === 'office'
-                  ? 'Admin uploaded office rules and policy documents will appear here'
-                  : 'Upload your first document to get started'}
-              </Text>
-              {(!isEmployee || activeTab === 'my') && (
-                <Button
-                  mode="contained"
-                  onPress={() => router.push('/documents/upload')}
-                  style={styles.emptyUploadButton}
-                >
-                  Upload First Document
-                </Button>
-              )}
-            </View>
+          <View style={styles.searchContainer}>
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search documents..."
+              placeholderTextColor="#9ca3af"
+              style={styles.searchInput}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity style={styles.searchClearButton} onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={18} color="#9ca3af" />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={styles.controlsRow}>
+            <TouchableOpacity style={styles.controlButton} onPress={() => setTypePickerVisible(true)}>
+              <Text style={styles.controlLabel}>Type: {fileTypeFilter === 'all' ? 'All' : fileTypeFilter === 'image' ? 'Images' : fileTypeFilter.toUpperCase()}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.controlButton} onPress={() => setSortPickerVisible(true)}>
+              <Text style={styles.controlLabel}>Sort: {sortBy === 'az' ? 'A-Z' : sortBy === 'newest' ? 'Newest' : 'Oldest'}</Text>
+            </TouchableOpacity>
+            {(fileTypeFilter !== 'all' || sortBy !== 'newest') && (
+              <TouchableOpacity
+                style={styles.controlClearButton}
+                onPress={() => {
+                  setFileTypeFilter('all');
+                  setSortBy('newest');
+                }}
+              >
+                <Text style={styles.controlClearText}>Clear</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {loading ? (
+            <View style={styles.listContainer}>{skeletonCards}</View>
           ) : (
             <FlatList
-              data={visibleDocuments}
+              data={filteredDocuments}
               renderItem={renderDocumentCard}
               keyExtractor={(item) => item.id}
               contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 120 }]}
               showsVerticalScrollIndicator={false}
               onRefresh={fetchDocuments}
               refreshing={loading}
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
+                  <Ionicons name="document-outline" size={64} color="#d1d5db" />
+                  <Text style={styles.emptyTitle}>
+                    {searchQuery || fileTypeFilter !== 'all'
+                      ? 'No matching documents'
+                      : isEmployee && activeTab === 'office'
+                        ? 'No office documents yet'
+                        : 'No documents yet'}
+                  </Text>
+                  <Text style={styles.emptySubtitle}>
+                    {searchQuery || fileTypeFilter !== 'all'
+                      ? 'Try a different search or clear filters.'
+                      : isEmployee && activeTab === 'office'
+                        ? 'Ask your admin to upload policy and office documents.'
+                        : 'Upload your first document to get started.'}
+                  </Text>
+                  <Text style={styles.refreshHint}>Pull down to refresh.</Text>
+                  {(searchQuery || fileTypeFilter !== 'all') && (
+                    <Button
+                      mode="outlined"
+                      onPress={() => {
+                        setSearchQuery('');
+                        setFileTypeFilter('all');
+                      }}
+                      style={styles.clearFilterButton}
+                    >
+                      Clear Filters
+                    </Button>
+                  )}
+                  {(!isEmployee || activeTab === 'my') && (
+                    <Button
+                      mode="contained"
+                      onPress={() => router.push('/documents/upload')}
+                      style={styles.emptyUploadButton}
+                    >
+                      Upload First Document
+                    </Button>
+                  )}
+                </View>
+              }
             />
           )}
         </View>
@@ -364,6 +444,53 @@ export default function DocumentsTabScreen() {
           fileUrl={selectedDocument?.file_url}
           loading={loadingPreview}
         />
+
+        <Modal visible={typePickerVisible} transparent animationType="fade" onRequestClose={() => setTypePickerVisible(false)}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setTypePickerVisible(false)}>
+            <View style={styles.modalCard}>
+              {[
+                { key: 'all', label: 'All' },
+                { key: 'pdf', label: 'PDF' },
+                { key: 'image', label: 'Images' },
+                { key: 'other', label: 'Other' },
+              ].map((filter) => (
+                <Pressable
+                  key={filter.key}
+                  style={styles.modalItem}
+                  onPress={() => {
+                    setFileTypeFilter(filter.key as 'all' | 'pdf' | 'image' | 'other');
+                    setTypePickerVisible(false);
+                  }}
+                >
+                  <Text style={styles.modalItemText}>{filter.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </Pressable>
+        </Modal>
+
+        <Modal visible={sortPickerVisible} transparent animationType="fade" onRequestClose={() => setSortPickerVisible(false)}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setSortPickerVisible(false)}>
+            <View style={styles.modalCard}>
+              {[
+                { key: 'newest', label: 'Newest' },
+                { key: 'oldest', label: 'Oldest' },
+                { key: 'az', label: 'A-Z' },
+              ].map((sort) => (
+                <Pressable
+                  key={sort.key}
+                  style={styles.modalItem}
+                  onPress={() => {
+                    setSortBy(sort.key as 'newest' | 'oldest' | 'az');
+                    setSortPickerVisible(false);
+                  }}
+                >
+                  <Text style={styles.modalItemText}>{sort.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </Pressable>
+        </Modal>
       </SafeAreaView>
     </AuthGuard>
   );
@@ -433,6 +560,53 @@ const styles = StyleSheet.create({
     padding: 4,
     marginBottom: 12,
   },
+  searchContainer: {
+    marginBottom: 10,
+  },
+  searchInput: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    color: '#111111',
+    fontSize: 14,
+  },
+  searchClearButton: {
+    position: 'absolute',
+    right: 12,
+    top: 11,
+  },
+  controlsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  controlButton: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  controlLabel: {
+    color: '#374151',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  controlClearButton: {
+    marginLeft: 'auto',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  controlClearText: {
+    color: '#2563eb',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   tabButton: {
     flex: 1,
     borderRadius: 10,
@@ -460,16 +634,6 @@ const styles = StyleSheet.create({
   checkboxContainer: {
     marginRight: 8,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6b7280',
-  },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
@@ -491,6 +655,35 @@ const styles = StyleSheet.create({
   },
   emptyUploadButton: {
     backgroundColor: '#2563eb',
+  },
+  clearFilterButton: {
+    marginBottom: 12,
+  },
+  refreshHint: {
+    fontSize: 12,
+    color: '#9ca3af',
+    marginBottom: 12,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  modalItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  modalItemText: {
+    fontSize: 15,
+    color: '#111111',
   },
   listContainer: {
     gap: 12,
@@ -532,6 +725,33 @@ const styles = StyleSheet.create({
   uploadDate: {
     fontSize: 14,
     color: '#6b7280',
+  },
+  skeletonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  skeletonIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#e5e7eb',
+    marginRight: 12,
+  },
+  skeletonTextWrap: {
+    flex: 1,
+    gap: 8,
+  },
+  skeletonLineLg: {
+    height: 12,
+    width: '70%',
+    borderRadius: 6,
+    backgroundColor: '#e5e7eb',
+  },
+  skeletonLineSm: {
+    height: 10,
+    width: '45%',
+    borderRadius: 5,
+    backgroundColor: '#f3f4f6',
   },
   actions: {
     flexDirection: 'row',

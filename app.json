@@ -21,7 +21,8 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.pixlerlab.employeemanagement"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -29,6 +30,13 @@
     "scheme": "employee-management",
     "plugins": [
       "expo-router"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a8a68c39-e91f-47a0-a2ce-c5a3a691ec21"
+      }
+    },
+    "owner": "arashdeep-kaur"
   }
 }

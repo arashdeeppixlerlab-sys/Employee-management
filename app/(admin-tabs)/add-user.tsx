@@ -17,6 +17,7 @@ export default function AddUserScreen() {
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newName, setNewName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const router = useRouter();
 
@@ -64,15 +65,19 @@ export default function AddUserScreen() {
         <View style={styles.container}>
           <View style={styles.createCard}>
             <Text style={styles.createTitle}>Create Employee Account</Text>
+            <Text style={styles.inputLabel}>Name</Text>
             <TextInput
               placeholder="Name (optional)"
+              placeholderTextColor="#6b7280"
               style={styles.input}
               value={newName}
               onChangeText={setNewName}
               editable={!submitting}
             />
+            <Text style={styles.inputLabel}>Email</Text>
             <TextInput
               placeholder="Email"
+              placeholderTextColor="#6b7280"
               style={styles.input}
               value={newEmail}
               onChangeText={setNewEmail}
@@ -80,14 +85,25 @@ export default function AddUserScreen() {
               autoCapitalize="none"
               editable={!submitting}
             />
-            <TextInput
-              placeholder="Password"
-              style={styles.input}
-              value={newPassword}
-              onChangeText={setNewPassword}
-              secureTextEntry
-              editable={!submitting}
-            />
+            <Text style={styles.inputLabel}>Password</Text>
+            <View style={styles.passwordContainer}>
+              <TextInput
+                placeholder="Password"
+                placeholderTextColor="#6b7280"
+                style={styles.passwordInput}
+                value={newPassword}
+                onChangeText={setNewPassword}
+                secureTextEntry={!showPassword}
+                editable={!submitting}
+              />
+              <TouchableOpacity
+                style={styles.passwordToggle}
+                onPress={() => setShowPassword((prev) => !prev)}
+                disabled={submitting}
+              >
+                <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
             <TouchableOpacity style={styles.createButton} onPress={handleCreateUser} disabled={submitting}>
               <Text style={styles.createButtonText}>{submitting ? 'Creating...' : 'Create User'}</Text>
             </TouchableOpacity>
@@ -142,6 +158,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#111111',
   },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#111111',
+    marginTop: 2,
+  },
   input: {
     borderWidth: 1,
     borderColor: '#d1d5db',
@@ -151,6 +173,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#111111',
     backgroundColor: '#ffffff',
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#111111',
+  },
+  passwordToggle: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   createButton: {
     backgroundColor: '#2563eb',

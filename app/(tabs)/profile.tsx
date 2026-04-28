@@ -434,7 +434,7 @@ export default function ProfileScreen() {
                         disabled={photoLoading}
                         textColor="#ef4444"
                       >
-                        Delete Photo
+                        Remove Photo
                       </Button>
                     ) : null}
                   </View>
@@ -463,7 +463,7 @@ export default function ProfileScreen() {
                 onPress={handleEditPress}
                 style={styles.editProfileButton}
               >
-                Edit Profile
+                Edit Account
               </Button>
             )}
 

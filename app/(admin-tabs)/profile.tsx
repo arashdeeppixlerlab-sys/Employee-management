@@ -506,7 +506,7 @@ export default function AdminProfile() {
                       textColor="#ef4444"
                       disabled={photoLoading}
                     >
-                      Delete Photo
+                      Remove Photo
                     </Button>
                   ) : null}
                 </View>
@@ -535,7 +535,7 @@ export default function AdminProfile() {
               onPress={handleEditPress}
               style={styles.editProfileButton}
             >
-              Edit Profile
+              Edit Account
             </Button>
           )}
 

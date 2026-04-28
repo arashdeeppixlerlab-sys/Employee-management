@@ -11,24 +11,23 @@ import {
   TouchableOpacity,
   Image,
 } from 'react-native';
-import { Button, Card, Divider, Switch } from 'react-native-paper';
+import { Button, Card, Divider, Switch, TextInput } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../src/hooks/useAuth';
 import { supabase } from '../src/services/supabase/supabaseClient';
 import { ProfilePhotoService } from '../src/services/ProfilePhotoService';
+import { AuthService } from '../src/services/AuthService';
 import { useI18n } from '../src/i18n';
 import PageHeader from '../src/components/PageHeader';
 
 type SettingsForm = {
-  emailNotifications: boolean;
   pushNotifications: boolean;
   timezone: string;
 };
 
 const DEFAULT_SETTINGS: SettingsForm = {
-  emailNotifications: true,
   pushNotifications: true,
   timezone: 'UTC+05:30',
 };
@@ -41,6 +40,16 @@ const TIMEZONE_OPTIONS = [
   'UTC+08:00',
 ];
 
+const parseUtcOffsetMinutes = (timezone: string) => {
+  const match = timezone.match(/^UTC([+-])(\d{2}):(\d{2})$/);
+  if (!match) return null;
+  const sign = match[1] === '+' ? 1 : -1;
+  const hours = Number(match[2]);
+  const minutes = Number(match[3]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return sign * (hours * 60 + minutes);
+};
+
 export default function Settings() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -50,13 +59,19 @@ export default function Settings() {
   const [form, setForm] = useState<SettingsForm>(DEFAULT_SETTINGS);
   const [initialForm, setInitialForm] = useState<SettingsForm>(DEFAULT_SETTINGS);
   const [saving, setSaving] = useState(false);
+  const [passwordSaving, setPasswordSaving] = useState(false);
   const [photoLoading, setPhotoLoading] = useState(false);
   const [timezoneMenuVisible, setTimezoneMenuVisible] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     setDisplayProfile(profile);
     const nextForm: SettingsForm = {
-      emailNotifications: profile?.email_notifications ?? DEFAULT_SETTINGS.emailNotifications,
       pushNotifications: profile?.push_notifications ?? DEFAULT_SETTINGS.pushNotifications,
       timezone: profile?.timezone ?? DEFAULT_SETTINGS.timezone,
     };
@@ -66,11 +81,20 @@ export default function Settings() {
 
   const hasChanges = useMemo(() => {
     return (
-      form.emailNotifications !== initialForm.emailNotifications ||
       form.pushNotifications !== initialForm.pushNotifications ||
       form.timezone.trim() !== initialForm.timezone.trim()
     );
   }, [form, initialForm]);
+
+  const canSubmitPassword = useMemo(() => {
+    return Boolean(currentPassword && newPassword && confirmPassword && !passwordSaving);
+  }, [currentPassword, newPassword, confirmPassword, passwordSaving]);
+
+  const clearPasswordForm = () => {
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+  };
 
   const handleSave = async () => {
     if (!user?.id) {
@@ -90,7 +114,6 @@ export default function Settings() {
       const { error } = await supabase
         .from('profiles')
         .update({
-          email_notifications: form.emailNotifications,
           push_notifications: form.pushNotifications,
           timezone,
         })
@@ -117,6 +140,42 @@ export default function Settings() {
   };
 
   const handleReset = () => setForm(initialForm);
+
+  const handleChangePassword = async () => {
+    const current = currentPassword.trim();
+    const next = newPassword.trim();
+    const confirm = confirmPassword.trim();
+
+    if (!current || !next || !confirm) {
+      Alert.alert(t('common.validation'), t('security.fillAll'));
+      return;
+    }
+    if (next.length < 8) {
+      Alert.alert(t('common.validation'), t('security.minLength'));
+      return;
+    }
+    if (next !== confirm) {
+      Alert.alert(t('common.validation'), t('security.passwordMismatch'));
+      return;
+    }
+    if (current === next) {
+      Alert.alert(t('common.validation'), t('security.passwordDifferent'));
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      const result = await AuthService.changePassword(current, next);
+      if (!result.success) {
+        Alert.alert(t('common.error'), result.error || t('security.changeFailed'));
+        return;
+      }
+      clearPasswordForm();
+      Alert.alert(t('common.success'), t('security.changedSuccess'));
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
 
   const handleUploadPhoto = async () => {
     if (!user?.id || photoLoading) return;
@@ -179,16 +238,25 @@ export default function Settings() {
   };
 
   const previewDateTime = useMemo(() => {
+    const offsetMinutes = parseUtcOffsetMinutes(form.timezone.trim());
     const now = new Date();
     try {
+      if (offsetMinutes === null) {
+        return new Intl.DateTimeFormat('en-US', {
+          dateStyle: 'full',
+          timeStyle: 'short',
+        }).format(now);
+      }
+      const utcTimestamp = now.getTime() + now.getTimezoneOffset() * 60 * 1000;
+      const targetTime = new Date(utcTimestamp + offsetMinutes * 60 * 1000);
       return new Intl.DateTimeFormat('en-US', {
         dateStyle: 'full',
         timeStyle: 'short',
-      }).format(now);
+      }).format(targetTime);
     } catch {
       return now.toLocaleString();
     }
-  }, []);
+  }, [form.timezone]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -230,7 +298,7 @@ export default function Settings() {
               </View>
               {displayProfile?.profile_photo_url ? (
                 <TouchableOpacity onPress={handleDeletePhoto} disabled={photoLoading} activeOpacity={0.7}>
-                  <Text style={styles.removePhotoText}>Remove photo</Text>
+                  <Text style={styles.removePhotoText}>Remove Photo</Text>
                 </TouchableOpacity>
               ) : null}
             </Card.Content>
@@ -239,16 +307,6 @@ export default function Settings() {
           <Card style={styles.sectionCard}>
             <Card.Content>
               <Text style={styles.sectionTitle}>{t('settings.section.notifications')}</Text>
-              <View style={styles.switchRow}>
-                <Text style={styles.switchLabel}>{t('settings.emailNotifications')}</Text>
-                <Switch
-                  value={form.emailNotifications}
-                  onValueChange={(value) =>
-                    setForm((prev) => ({ ...prev, emailNotifications: value }))
-                  }
-                />
-              </View>
-              <Divider style={styles.divider} />
               <View style={styles.switchRow}>
                 <Text style={styles.switchLabel}>{t('settings.pushNotifications')}</Text>
                 <Switch
@@ -283,10 +341,66 @@ export default function Settings() {
           <Card style={styles.sectionCard}>
             <Card.Content>
               <Text style={styles.sectionTitle}>{t('settings.section.securityShortcut')}</Text>
-              <Text style={styles.profileMeta}>
-                {t('settings.shortcutDescription')}
-              </Text>
-              <Button mode="outlined" onPress={() => router.push('/security')}>
+              <TextInput
+                label={t('security.currentPassword')}
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+                mode="outlined"
+                secureTextEntry={!showCurrentPassword}
+                right={
+                  <TextInput.Icon
+                    icon={showCurrentPassword ? 'eye-off' : 'eye'}
+                    onPress={() => setShowCurrentPassword((prev) => !prev)}
+                    forceTextInputFocus={false}
+                  />
+                }
+                style={styles.input}
+              />
+              <TextInput
+                label={t('security.newPassword')}
+                value={newPassword}
+                onChangeText={setNewPassword}
+                mode="outlined"
+                secureTextEntry={!showNewPassword}
+                right={
+                  <TextInput.Icon
+                    icon={showNewPassword ? 'eye-off' : 'eye'}
+                    onPress={() => setShowNewPassword((prev) => !prev)}
+                    forceTextInputFocus={false}
+                  />
+                }
+                style={styles.input}
+              />
+              <TextInput
+                label={t('security.confirmNewPassword')}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                mode="outlined"
+                secureTextEntry={!showConfirmPassword}
+                right={
+                  <TextInput.Icon
+                    icon={showConfirmPassword ? 'eye-off' : 'eye'}
+                    onPress={() => setShowConfirmPassword((prev) => !prev)}
+                    forceTextInputFocus={false}
+                  />
+                }
+                style={styles.input}
+              />
+              <Text style={styles.requirementText}>{t('security.requirement')}</Text>
+              <View style={styles.passwordActions}>
+                <Button mode="outlined" onPress={clearPasswordForm} disabled={passwordSaving}>
+                  {t('common.reset')}
+                </Button>
+                <Button
+                  mode="contained"
+                  onPress={handleChangePassword}
+                  loading={passwordSaving}
+                  disabled={!canSubmitPassword}
+                >
+                  {t('security.changePassword')}
+                </Button>
+              </View>
+              <Button mode="text" onPress={() => router.push('/security')}>
                 {t('settings.openSecurity')}
               </Button>
             </Card.Content>
@@ -477,6 +591,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#111111',
     fontWeight: '500',
+  },
+  input: {
+    marginBottom: 10,
+  },
+  requirementText: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginTop: 4,
+  },
+  passwordActions: {
+    marginTop: 16,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
   },
   actions: {
     flexDirection: 'row',
