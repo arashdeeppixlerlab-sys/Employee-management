@@ -3,13 +3,13 @@ import {
   View, 
   Text, 
   StyleSheet, 
-  SafeAreaView, 
   ActivityIndicator,
   ScrollView,
   FlatList,
   TouchableOpacity,
   Alert
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons'; // FIX: Add back button icon
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { EmployeeService, Employee } from '../../src/services/EmployeeService';

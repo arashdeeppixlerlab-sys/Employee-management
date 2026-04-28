@@ -3,14 +3,15 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ActivityIndicator,
   ScrollView,
   TouchableOpacity,
   Dimensions,
   Alert,
   Image,
+  StatusBar,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Avatar, Divider, TextInput } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +25,7 @@ const { width } = Dimensions.get('window');
 
 export default function AdminProfile() {
   const { refreshProfile } = useAuth();
+  const insets = useSafeAreaInsets();
   const [userId, setUserId] = useState<string | null>(null);
   const [profile, setProfile] = useState<{
     id?: string;
@@ -356,9 +358,10 @@ export default function AdminProfile() {
   return (
     <AuthGuard requiredRole="admin">
       <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" translucent={false} />
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
           {/* Profile Header */}
-          <View style={styles.header}>
+          <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
             <View style={styles.profileHeader}>
               {profile?.profile_photo_url ? (
                 <Image source={{ uri: profile.profile_photo_url }} style={styles.avatarImage} />

@@ -3,11 +3,12 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   Alert,
   Image,
+  StatusBar,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Card,
   Button,
@@ -16,7 +17,6 @@ import {
   TextInput,
 } from 'react-native-paper';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/hooks/useAuth';
 import { supabase } from '../../src/services/supabase/supabaseClient';
 import { ProfilePhotoService } from '../../src/services/ProfilePhotoService';
@@ -300,6 +300,7 @@ export default function ProfileScreen() {
   return (
     <>
       <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" translucent={false} />
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
           <View style={[styles.container, { paddingTop: Math.max(insets.top, 10) }]}>
             {/* Profile Header */}

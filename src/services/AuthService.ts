@@ -3,6 +3,14 @@ import { AuthResponse, LoginCredentials, Profile } from '../types/auth';
 
 export class AuthService {
   private static subscription: any = null;
+  private static isInvalidRefreshTokenError(error: any): boolean {
+    const message = error?.message || '';
+    return (
+      message.includes('Invalid Refresh Token') ||
+      message.includes('Refresh Token Not Found') ||
+      message.includes('Invalid session')
+    );
+  }
 
   static async initializeAuth() {
     // Set up session listener using correct Supabase v2 pattern
@@ -103,14 +111,20 @@ export class AuthService {
 
   static async getCurrentUser(): Promise<{ user: any | null; profile: Profile | null }> {
     try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError && this.isInvalidRefreshTokenError(sessionError)) {
+        await this.safeLogout();
+        return { user: null, profile: null };
+      }
+
+      if (!sessionData?.session) {
+        return { user: null, profile: null };
+      }
+
       const { data: { user }, error } = await supabase.auth.getUser();
       
       // Handle invalid refresh token errors
-      if (error && (
-        error.message?.includes('Invalid Refresh Token') ||
-        error.message?.includes('Refresh Token Not Found') ||
-        error.message?.includes('Invalid session')
-      )) {
+      if (error && this.isInvalidRefreshTokenError(error)) {
         await this.safeLogout();
         return { user: null, profile: null };
       }
@@ -140,10 +154,8 @@ export class AuthService {
 
   static async safeLogout(): Promise<void> {
     try {
-      await supabase.auth.signOut({ scope: 'global' });
-    } catch {
-      return;
-    }
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch {}
   }
 
   static async changePassword(

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Card, TextInput } from 'react-native-paper';
 import { AuthService } from '../src/services/AuthService';
 import { useI18n } from '../src/i18n';

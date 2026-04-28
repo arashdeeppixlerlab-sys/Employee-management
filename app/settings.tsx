@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   Alert,
   Modal,
@@ -11,10 +10,10 @@ import {
   TouchableOpacity,
   Image,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Divider, Switch, TextInput } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../src/hooks/useAuth';
 import { supabase } from '../src/services/supabase/supabaseClient';
 import { ProfilePhotoService } from '../src/services/ProfilePhotoService';
