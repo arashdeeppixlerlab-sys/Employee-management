@@ -2,7 +2,6 @@ import { supabase } from './supabase/supabaseClient';
 import { AuthResponse, LoginCredentials, Profile } from '../types/auth';
 
 export class AuthService {
-  private static subscription: any = null;
   private static isInvalidRefreshTokenError(error: any): boolean {
     const message = error?.message || '';
     return (
@@ -12,18 +11,10 @@ export class AuthService {
     );
   }
 
-  static async initializeAuth() {
-    // Set up session listener using correct Supabase v2 pattern
-    if (!this.subscription) {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {});
-      this.subscription = subscription;
-    }
-  }
-
-  static cleanup() {
-    // Safe cleanup with optional chaining
-    this.subscription?.unsubscribe();
-    this.subscription = null;
+  static subscribeToAuthChanges(
+    callback: Parameters<typeof supabase.auth.onAuthStateChange>[0]
+  ) {
+    return supabase.auth.onAuthStateChange(callback);
   }
   static async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
@@ -146,8 +137,6 @@ export class AuthService {
       };
     } catch (error) {
       console.error('Get current user error:', error);
-      // Handle network or other errors by clearing session
-      await this.safeLogout();
       return { user: null, profile: null };
     }
   }

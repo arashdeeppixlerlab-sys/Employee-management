@@ -12,6 +12,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   Card,
   Button,
+  IconButton,
 } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -175,11 +176,10 @@ export default function DashboardScreen() {
                           {formatDate(doc.created_at)}
                         </Text>
                       </View>
-                      <Button
-                        mode="text"
+                      <IconButton
                         icon="chevron-right"
                         onPress={() => router.replace('/(tabs)/documents')}
-                        compact
+                        size={20}
                       />
                     </View>
                   ))}

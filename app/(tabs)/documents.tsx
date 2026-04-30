@@ -48,6 +48,7 @@ export default function DocumentsTabScreen() {
   const [sortPickerVisible, setSortPickerVisible] = useState(false);
   const [deletingIds, setDeletingIds] = useState<string[]>([]);
   const [deletingBatch, setDeletingBatch] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(5);
   
   const {
     documents,
@@ -88,8 +89,14 @@ export default function DocumentsTabScreen() {
   }, [visibleDocuments, searchQuery, fileTypeFilter, sortBy]);
 
   useEffect(() => {
-    fetchDocuments();
-  }, [fetchDocuments]);
+    setVisibleCount(5);
+  }, [activeTab, searchQuery, fileTypeFilter, sortBy, documents]);
+
+  const paginatedDocuments = useMemo(
+    () => filteredDocuments.slice(0, visibleCount),
+    [filteredDocuments, visibleCount],
+  );
+  const hasMoreDocuments = filteredDocuments.length > visibleCount;
 
   useFocusEffect(
     useCallback(() => {
@@ -149,8 +156,6 @@ export default function DocumentsTabScreen() {
       setSelectedIds([]);
       setMultiSelectMode(false);
 
-      await fetchDocuments(); // 🔥 FORCE REFRESH
-
     } catch (error) {
       Alert.alert('Error', 'Failed to delete documents');
     } finally {
@@ -174,9 +179,7 @@ export default function DocumentsTabScreen() {
     setDeletingIds((prev) => [...prev, document.id]);
     const result = await deleteDocument(document.id);
 
-    if (result.success) {
-      await fetchDocuments(); // 🔥 FORCE REFRESH HERE
-    } else {
+    if (!result.success) {
       Alert.alert('Error', result.error || 'Delete failed');
     }
     setDeletingIds((prev) => prev.filter((id) => id !== document.id));
@@ -376,7 +379,7 @@ export default function DocumentsTabScreen() {
             <View style={styles.listContainer}>{skeletonCards}</View>
           ) : (
             <FlatList
-              data={filteredDocuments}
+              data={paginatedDocuments}
               renderItem={renderDocumentCard}
               keyExtractor={(item) => item.id}
               contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 120 }]}
@@ -423,6 +426,17 @@ export default function DocumentsTabScreen() {
                     </Button>
                   )}
                 </View>
+              }
+              ListFooterComponent={
+                hasMoreDocuments ? (
+                  <TouchableOpacity
+                    style={styles.readMoreButton}
+                    onPress={() => setVisibleCount((prev) => prev + 5)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.readMoreButtonText}>Read More</Text>
+                  </TouchableOpacity>
+                ) : null
               }
             />
           )}
@@ -765,5 +779,19 @@ const styles = StyleSheet.create({
   },
   snackbar: {
     marginBottom: 120,
+  },
+  readMoreButton: {
+    marginTop: 4,
+    marginBottom: 8,
+    alignSelf: 'center',
+    backgroundColor: '#2563eb',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  readMoreButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

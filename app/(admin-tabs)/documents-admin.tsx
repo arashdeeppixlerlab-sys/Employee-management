@@ -19,7 +19,6 @@ import { useDocuments } from '../../src/hooks/useDocuments';
 import { useAuth } from '../../src/hooks/useAuth';
 import AuthGuard from '../../src/components/AuthGuard';
 import { supabase } from '../../src/services/supabase/supabaseClient';
-import { useFocusEffect } from 'expo-router';
 import { useRouter } from 'expo-router';
 import DocumentViewerModal from '../../src/components/DocumentViewerModal';
 import { resolveDocumentOpenUrl } from '../../src/utils/documentOpenUrl';
@@ -59,6 +58,7 @@ export default function AdminDocumentsScreen() {
   const [sortPickerVisible, setSortPickerVisible] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleting, setConfirmDeleting] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(5);
 
   useEffect(() => {
     let isActive = true;
@@ -115,7 +115,7 @@ export default function AdminDocumentsScreen() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [profile?.id]); // 🚨 REMOVE fetchDashboardData
+  }, [profile?.id, fetchAdminDocuments]);
 
   // Fetch admin documents on initial load
   useEffect(() => {
@@ -137,14 +137,6 @@ export default function AdminDocumentsScreen() {
       isMounted = false;
     };
   }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (profile?.id) {
-        fetchAdminDocuments();
-      }
-    }, [profile?.id, fetchAdminDocuments])
-  );
 
   const handleRefresh = useCallback(async () => {
     try {
@@ -282,6 +274,16 @@ export default function AdminDocumentsScreen() {
     });
   }, [documents, searchQuery, fileTypeFilter, sortBy]);
 
+  useEffect(() => {
+    setVisibleCount(5);
+  }, [searchQuery, fileTypeFilter, sortBy, documents]);
+
+  const paginatedDocuments = useMemo(
+    () => filteredDocuments.slice(0, visibleCount),
+    [filteredDocuments, visibleCount],
+  );
+  const hasMoreDocuments = filteredDocuments.length > visibleCount;
+
   const skeletonCards = Array.from({ length: 4 }, (_, index) => (
     <Card key={`skeleton-${index}`} style={styles.documentCard}>
       <Card.Content style={styles.cardContent}>
@@ -381,7 +383,7 @@ export default function AdminDocumentsScreen() {
               </View>
 
               <FlatList
-                data={filteredDocuments}
+                data={paginatedDocuments}
                 renderItem={renderDocumentItem}
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 120 }]}
@@ -422,6 +424,17 @@ export default function AdminDocumentsScreen() {
                   </View>
                 }
                 showsVerticalScrollIndicator={false}
+                ListFooterComponent={
+                  hasMoreDocuments ? (
+                    <TouchableOpacity
+                      style={styles.readMoreButton}
+                      onPress={() => setVisibleCount((prev) => prev + 5)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.readMoreButtonText}>Read More</Text>
+                    </TouchableOpacity>
+                  ) : null
+                }
               />
 
               {filteredDocuments.length > 0 && (
@@ -961,6 +974,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#ffffff',
     letterSpacing: 0.3,
+  },
+  readMoreButton: {
+    marginTop: 4,
+    marginBottom: 8,
+    alignSelf: 'center',
+    backgroundColor: '#2563eb',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  readMoreButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
 

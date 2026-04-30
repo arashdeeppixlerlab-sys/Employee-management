@@ -1,9 +1,33 @@
-import { useState, useEffect, useRef } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { AuthService } from '../services/AuthService';
 import { AuthState, LoginCredentials } from '../types/auth';
 
-export const useAuth = () => {
+type UseAuthReturn = AuthState & {
+  login: (credentials: LoginCredentials) => Promise<{ success: boolean; profile?: any; error?: string }>;
+  logout: () => Promise<{ success: boolean; error?: string }>;
+  clearError: () => void;
+  refreshProfile: () => Promise<boolean>;
+  isAuthenticated: boolean;
+  isAdmin: boolean;
+  isEmployee: boolean;
+};
+
+const AuthContext = createContext<UseAuthReturn | null>(null);
+
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const isMounted = useRef(true);
+  const profileRequestInFlightRef = useRef<Promise<any> | null>(null);
+  const lastProfileFetchAtRef = useRef(0);
+  const cachedProfileRef = useRef<any>(null);
+  const currentUserIdRef = useRef<string | null>(null);
 
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
@@ -12,64 +36,147 @@ export const useAuth = () => {
     error: null,
   });
 
+  const setAuthStateSafe = useCallback((updater: AuthState | ((prev: AuthState) => AuthState)) => {
+    if (!isMounted.current) return;
+    setAuthState(updater);
+  }, []);
+
   useEffect(() => {
-    isMounted.current = true;
+    cachedProfileRef.current = authState.profile;
+  }, [authState.profile]);
 
-    AuthService.initializeAuth();
+  useEffect(() => {
+    currentUserIdRef.current = authState.user?.id ?? null;
+  }, [authState.user?.id]);
 
-    const initializeAuth = async () => {
+  const fetchProfileWithGuard = useCallback(
+    async (userId: string, force = false) => {
+      const now = Date.now();
+      const minIntervalMs = 1500;
+
+      if (!force && profileRequestInFlightRef.current) {
+        return profileRequestInFlightRef.current;
+      }
+
+      if (!force && now - lastProfileFetchAtRef.current < minIntervalMs) {
+        return cachedProfileRef.current;
+      }
+
+      const request = AuthService.fetchProfile(userId);
+      profileRequestInFlightRef.current = request;
+      lastProfileFetchAtRef.current = now;
+
       try {
-        const { user, profile } = await AuthService.getCurrentUser();
-
-        if (isMounted.current) {
-          setAuthState({
-            user,
-            profile,
-            loading: false,
-            error: null,
-          });
-        }
-      } catch (error) {
-        if (isMounted.current) {
-          setAuthState({
-            user: null,
-            profile: null,
-            loading: false,
-            error: null,
-          });
+        return await request;
+      } finally {
+        if (profileRequestInFlightRef.current === request) {
+          profileRequestInFlightRef.current = null;
         }
       }
-    };
+    },
+    []
+  );
 
+  const initializeAuth = useCallback(async () => {
+    try {
+      const { user, profile } = await AuthService.getCurrentUser();
+      setAuthStateSafe({
+        user,
+        profile,
+        loading: false,
+        error: null,
+      });
+    } catch {
+      setAuthStateSafe({
+        user: null,
+        profile: null,
+        loading: false,
+        error: null,
+      });
+    }
+  }, [setAuthStateSafe]);
+
+  useEffect(() => {
+    isMounted.current = true;
     initializeAuth();
+
+    const {
+      data: { subscription },
+    } = AuthService.subscribeToAuthChanges(async (event, session) => {
+      if (!session?.user) {
+        setAuthStateSafe({
+          user: null,
+          profile: null,
+          loading: false,
+          error: null,
+        });
+        return;
+      }
+
+      if (event === 'TOKEN_REFRESHED') {
+        setAuthStateSafe((prev) => ({
+          ...prev,
+          user: session.user,
+          loading: false,
+          error: null,
+        }));
+        return;
+      }
+
+      const isSameUser = currentUserIdRef.current === session.user.id;
+      const hasCachedProfile = !!cachedProfileRef.current;
+
+      if (
+        (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') &&
+        isSameUser &&
+        hasCachedProfile
+      ) {
+        setAuthStateSafe((prev) => ({
+          ...prev,
+          user: session.user,
+          profile: cachedProfileRef.current,
+          loading: false,
+          error: null,
+        }));
+        return;
+      }
+
+      const shouldForceProfileFetch =
+        event === 'USER_UPDATED' || (event === 'SIGNED_IN' && !isSameUser);
+      const profile = await fetchProfileWithGuard(session.user.id, shouldForceProfileFetch);
+      setAuthStateSafe({
+        user: session.user,
+        profile: profile ?? cachedProfileRef.current,
+        loading: false,
+        error: null,
+      });
+    });
 
     return () => {
       isMounted.current = false;
-      AuthService.cleanup();
+      subscription.unsubscribe();
     };
-  }, []);
+  }, [initializeAuth, setAuthStateSafe, fetchProfileWithGuard]);
 
-  const login = async (credentials: LoginCredentials) => {
+  const login = useCallback(async (credentials: LoginCredentials) => {
     try {
-      setAuthState(prev => ({ ...prev, loading: true, error: null }));
+      setAuthStateSafe((prev) => ({ ...prev, loading: true, error: null }));
 
       const response = await AuthService.login(credentials);
 
       if (response.success && response.profile) {
-        const { user } = await AuthService.getCurrentUser();
+        const { user, profile } = await AuthService.getCurrentUser();
 
-        if (isMounted.current) {
-          setAuthState({
-            user,
-            profile: response.profile,
-            loading: false,
-            error: null,
-          });
-        }
+        setAuthStateSafe({
+          user,
+          profile: profile || response.profile,
+          loading: false,
+          error: null,
+        });
 
         return { success: true, profile: response.profile };
       } else {
-        setAuthState(prev => ({
+        setAuthStateSafe((prev) => ({
           ...prev,
           loading: false,
           error: response.error || 'Login failed',
@@ -81,7 +188,7 @@ export const useAuth = () => {
       const errorMessage =
         error instanceof Error ? error.message : 'Login failed';
 
-      setAuthState(prev => ({
+      setAuthStateSafe((prev) => ({
         ...prev,
         loading: false,
         error: errorMessage,
@@ -89,27 +196,25 @@ export const useAuth = () => {
 
       return { success: false, error: errorMessage };
     }
-  };
+  }, [setAuthStateSafe]);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
-      setAuthState(prev => ({ ...prev, loading: true, error: null }));
+      setAuthStateSafe((prev) => ({ ...prev, loading: true, error: null }));
 
       const response = await AuthService.logout();
 
       if (response.success) {
-        if (isMounted.current) {
-          setAuthState({
-            user: null,
-            profile: null,
-            loading: false,
-            error: null,
-          });
-        }
+        setAuthStateSafe({
+          user: null,
+          profile: null,
+          loading: false,
+          error: null,
+        });
 
         return { success: true };
       } else {
-        setAuthState(prev => ({
+        setAuthStateSafe((prev) => ({
           ...prev,
           loading: false,
           error: response.error || 'Logout failed',
@@ -121,7 +226,7 @@ export const useAuth = () => {
       const errorMessage =
         error instanceof Error ? error.message : 'Logout failed';
 
-      setAuthState(prev => ({
+      setAuthStateSafe((prev) => ({
         ...prev,
         loading: false,
         error: errorMessage,
@@ -129,20 +234,20 @@ export const useAuth = () => {
 
       return { success: false, error: errorMessage };
     }
-  };
+  }, [setAuthStateSafe]);
 
-  const clearError = () => {
-    setAuthState(prev => ({ ...prev, error: null }));
-  };
+  const clearError = useCallback(() => {
+    setAuthStateSafe((prev) => ({ ...prev, error: null }));
+  }, [setAuthStateSafe]);
 
-  const refreshProfile = async (): Promise<boolean> => {
+  const refreshProfile = useCallback(async (): Promise<boolean> => {
     try {
       if (!authState.user?.id) return false;
       
-      const profile = await AuthService.fetchProfile(authState.user.id);
+      const profile = await fetchProfileWithGuard(authState.user.id, true);
       
-      if (isMounted.current && profile) {
-        setAuthState(prev => ({
+      if (profile) {
+        setAuthStateSafe((prev) => ({
           ...prev,
           profile,
         }));
@@ -153,9 +258,9 @@ export const useAuth = () => {
       console.error('Failed to refresh profile:', error);
       return false;
     }
-  };
+  }, [authState.user?.id, setAuthStateSafe, fetchProfileWithGuard]);
 
-  return {
+  const value = useMemo<UseAuthReturn>(() => ({
     ...authState,
     login,
     logout,
@@ -164,5 +269,16 @@ export const useAuth = () => {
     isAuthenticated: !!authState.user,
     isAdmin: authState.profile?.role === 'admin',
     isEmployee: authState.profile?.role === 'employee',
-  };
+  }), [authState, login, logout, clearError, refreshProfile]);
+
+  return React.createElement(AuthContext.Provider, { value }, children);
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
+
+  return context;
 };

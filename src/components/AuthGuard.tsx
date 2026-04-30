@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
 import { useAuth } from '../hooks/useAuth';
 
 interface AuthGuardProps {
@@ -10,29 +10,29 @@ interface AuthGuardProps {
 
 export default function AuthGuard({ children, requiredRole }: AuthGuardProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { isAuthenticated, loading, profile, isAdmin, isEmployee } = useAuth();
 
   useEffect(() => {
-    if (!loading) {
-      // Not authenticated - redirect to login
-      if (!isAuthenticated || !profile) {
+    if (loading) return;
+    if (!isAuthenticated) {
+      if (pathname !== '/login') {
         router.replace('/login');
+      }
+      return;
+    }
+    if (!profile) return;
+
+    if (requiredRole) {
+      if (requiredRole === 'admin' && !isAdmin) {
+        router.replace('/(tabs)/dashboard');
         return;
       }
-
-      // Check role-based access ONLY if required
-      if (requiredRole) {
-        if (requiredRole === 'admin' && !isAdmin) {
-          router.replace('/(tabs)/dashboard');
-          return;
-        }
-        if (requiredRole === 'employee' && !isEmployee) {
-          router.replace(isAdmin ? '/(admin-tabs)/dashboard' : '/(tabs)/dashboard');
-          return;
-        }
+      if (requiredRole === 'employee' && !isEmployee) {
+        router.replace(isAdmin ? '/(admin-tabs)/dashboard' : '/(tabs)/dashboard');
       }
     }
-  }, [loading, isAuthenticated, profile, isAdmin, isEmployee, requiredRole, router]);
+  }, [loading, isAuthenticated, profile, isAdmin, isEmployee, requiredRole, router, pathname]);
 
   // Show loading while checking auth
   if (loading) {
@@ -47,12 +47,23 @@ export default function AuthGuard({ children, requiredRole }: AuthGuardProps) {
   }
 
   // Show loading while redirecting
-  if (!isAuthenticated || !profile) {
+  if (!isAuthenticated) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#2563eb" />
           <Text style={styles.loadingText}>Redirecting...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#2563eb" />
+          <Text style={styles.loadingText}>Loading profile...</Text>
         </View>
       </SafeAreaView>
     );

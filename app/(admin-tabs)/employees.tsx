@@ -31,6 +31,7 @@ export default function AdminEmployees() {
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [pendingRowAction, setPendingRowAction] = useState<{ userId: string; type: RowActionType } | null>(null);
   const [pendingBulkAction, setPendingBulkAction] = useState<BulkActionType | null>(null);
+  const [visibleCount, setVisibleCount] = useState(5);
   const router = useRouter();
 
   const fetchEmployees = async () => {
@@ -48,6 +49,10 @@ export default function AdminEmployees() {
   useEffect(() => {
     fetchEmployees();
   }, []);
+
+  useEffect(() => {
+    setVisibleCount(5);
+  }, [employees]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -283,6 +288,9 @@ export default function AdminEmployees() {
     </TouchableOpacity>
   );
 
+  const paginatedEmployees = employees.slice(0, visibleCount);
+  const hasMoreEmployees = employees.length > visibleCount;
+
   if (loading) {
     return (
       <AuthGuard requiredRole="admin">
@@ -364,7 +372,7 @@ export default function AdminEmployees() {
             </View>
           )}
           <FlatList
-            data={employees}
+            data={paginatedEmployees}
             renderItem={renderEmployeeItem}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContainer}
@@ -375,6 +383,17 @@ export default function AdminEmployees() {
               <View style={styles.emptyContainer}>
                 <Text style={styles.emptyText}>No employees found</Text>
               </View>
+            }
+            ListFooterComponent={
+              hasMoreEmployees ? (
+                <TouchableOpacity
+                  style={styles.readMoreButton}
+                  onPress={() => setVisibleCount((prev) => prev + 5)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.readMoreButtonText}>Read More</Text>
+                </TouchableOpacity>
+              ) : null
             }
           />
         </View>
@@ -630,5 +649,19 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: '#6b7280',
+  },
+  readMoreButton: {
+    marginTop: 4,
+    marginBottom: 8,
+    alignSelf: 'center',
+    backgroundColor: '#2563eb',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  readMoreButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

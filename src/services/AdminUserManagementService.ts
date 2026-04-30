@@ -33,6 +33,27 @@ interface InvokePayload {
   reason?: string | null;
 }
 
+const getFriendlyCreateUserError = (error?: string): string => {
+  if (!error) return 'Failed to create user';
+
+  const normalized = error.toLowerCase();
+  const duplicateSignals = [
+    'already registered',
+    'already exists',
+    'duplicate',
+    'unique constraint',
+    'email address already',
+    'user already',
+    'phone number already',
+  ];
+
+  if (duplicateSignals.some((signal) => normalized.includes(signal))) {
+    return 'A user with this email or phone number already exists. Please use different credentials.';
+  }
+
+  return error;
+};
+
 const getFunctionErrorMessage = async (error: unknown, fallback: string): Promise<string> => {
   const basicMessage = error instanceof Error ? error.message : fallback;
   const maybeContext = (error as { context?: Response } | null)?.context;
@@ -143,11 +164,11 @@ export class AdminUserManagementService {
     });
 
     if (errorMessage) {
-      return { success: false, error: errorMessage };
+      return { success: false, error: getFriendlyCreateUserError(errorMessage) };
     }
 
     if (!data?.success) {
-      return { success: false, error: data?.error ?? 'Failed to create user' };
+      return { success: false, error: getFriendlyCreateUserError(data?.error) };
     }
 
     return { success: true };

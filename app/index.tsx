@@ -12,12 +12,17 @@ export default function Index() {
 
     if (!user) {
       router.replace('/login');
+      return;
+    }
+
+    if (!profile) {
+      return;
     } else if (profile?.role === 'admin') {
       router.replace('/(admin-tabs)/dashboard');
     } else {
       router.replace('/(tabs)/dashboard');
     }
-  }, [user, profile, loading]);
+  }, [user, profile, loading, router]);
 
   return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>

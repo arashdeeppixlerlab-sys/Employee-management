@@ -3,7 +3,7 @@ import React from 'react';
 import { Stack } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
 import { View, ActivityIndicator } from 'react-native';
-import { useAuth } from '../src/hooks/useAuth';
+import { AuthProvider, useAuth } from '../src/hooks/useAuth';
 import { I18nProvider, useI18n } from '../src/i18n';
 
 const theme = {
@@ -20,9 +20,19 @@ const theme = {
 };
 
 export default function RootLayout() {
+  return (
+    <I18nProvider>
+      <AuthProvider>
+        <AppShell />
+      </AuthProvider>
+    </I18nProvider>
+  );
+}
+
+function AppShell() {
+  const { t } = useI18n();
   const { loading } = useAuth();
 
-  // ✅ ONLY show loader here
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -30,17 +40,6 @@ export default function RootLayout() {
       </View>
     );
   }
-
-  // NO navigation logic here
-  return (
-    <I18nProvider>
-      <AppShell />
-    </I18nProvider>
-  );
-}
-
-function AppShell() {
-  const { t } = useI18n();
 
   return (
     <PaperProvider theme={theme}>
