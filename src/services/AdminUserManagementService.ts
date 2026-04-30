@@ -33,6 +33,9 @@ interface InvokePayload {
   reason?: string | null;
 }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 8;
+
 const getFriendlyCreateUserError = (error?: string): string => {
   if (!error) return 'Failed to create user';
 
@@ -155,11 +158,38 @@ export class AdminUserManagementService {
   }
 
   static async createUser(input: CreateUserInput): Promise<AdminActionResult> {
+    const email = input.email.trim().toLowerCase();
+    const password = input.password;
+    const name = input.name?.trim() ?? '';
+
+    if (!email) {
+      return { success: false, error: 'Email is required.' };
+    }
+
+    if (!EMAIL_REGEX.test(email)) {
+      return { success: false, error: 'Please enter a valid email address.' };
+    }
+
+    if (!password) {
+      return { success: false, error: 'Password is required.' };
+    }
+
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      return {
+        success: false,
+        error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
+      };
+    }
+
+    if (name && name.length < 2) {
+      return { success: false, error: 'Name must be at least 2 characters.' };
+    }
+
     const { data, errorMessage } = await invokeAdminFunction({
       operation: 'create_user',
-      email: input.email.trim().toLowerCase(),
-      password: input.password,
-      name: input.name ?? '',
+      email,
+      password,
+      name,
       role: input.role ?? 'employee',
     });
 

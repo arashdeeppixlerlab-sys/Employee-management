@@ -2,6 +2,28 @@ import { supabase } from './supabase/supabaseClient';
 import { AuthResponse, LoginCredentials, Profile } from '../types/auth';
 
 export class AuthService {
+  private static getFriendlyLoginError(message?: string): string {
+    if (!message) return 'Login failed. Please try again.';
+    const normalized = message.toLowerCase();
+
+    if (
+      normalized.includes('invalid login credentials') ||
+      normalized.includes('invalid credentials') ||
+      normalized.includes('email not confirmed') ||
+      normalized.includes('invalid_grant') ||
+      normalized.includes('grant_type=password') ||
+      normalized.includes('token') && normalized.includes('400')
+    ) {
+      return 'Incorrect email or password.';
+    }
+
+    if (normalized.includes('network request failed') || normalized.includes('failed to fetch')) {
+      return 'Unable to reach server. Please check your internet connection.';
+    }
+
+    return message;
+  }
+
   private static isInvalidRefreshTokenError(error: any): boolean {
     const message = error?.message || '';
     return (
@@ -26,7 +48,7 @@ export class AuthService {
       if (authError) {
         return {
           success: false,
-          error: authError.message,
+          error: this.getFriendlyLoginError(authError.message),
         };
       }
 
@@ -63,7 +85,7 @@ export class AuthService {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: this.getFriendlyLoginError(error instanceof Error ? error.message : 'Unknown error occurred'),
       };
     }
   }

@@ -13,21 +13,54 @@ import { useRouter } from 'expo-router';
 import AuthGuard from '../../src/components/AuthGuard';
 import { AdminUserManagementService } from '../../src/services/AdminUserManagementService';
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 8;
+
 export default function AddUserScreen() {
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newName, setNewName] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{
+    email?: string;
+    password?: string;
+    name?: string;
+  }>({});
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const router = useRouter();
 
+  const validateForm = (email: string, password: string, name: string) => {
+    const errors: { email?: string; password?: string; name?: string } = {};
+
+    if (!email) {
+      errors.email = 'Email is required.';
+    } else if (!EMAIL_REGEX.test(email)) {
+      errors.email = 'Enter a valid email address (example@company.com).';
+    }
+
+    if (!password) {
+      errors.password = 'Password is required.';
+    } else if (password.length < MIN_PASSWORD_LENGTH) {
+      errors.password = `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+    }
+
+    if (name && name.length < 2) {
+      errors.name = 'Name must be at least 2 characters.';
+    }
+
+    return errors;
+  };
+
   const handleCreateUser = async () => {
     const email = newEmail.trim().toLowerCase();
-    const password = newPassword.trim();
+    const password = newPassword;
     const name = newName.trim();
 
-    if (!email || !password) {
-      Alert.alert('Missing Fields', 'Email and password are required.');
+    const validationErrors = validateForm(email, password, name);
+    setFieldErrors(validationErrors);
+
+    if (Object.keys(validationErrors).length > 0) {
+      Alert.alert('Please fix the highlighted fields', 'Required details are missing or invalid.');
       return;
     }
 
@@ -41,13 +74,31 @@ export default function AddUserScreen() {
     setSubmitting(false);
 
     if (!result.success) {
-      Alert.alert('Create User Failed', result.error || 'Please try again.');
+      const errorMessage = result.error || 'Please try again.';
+      const normalized = errorMessage.toLowerCase();
+      const isDuplicateEmailError =
+        normalized.includes('already') ||
+        normalized.includes('exists') ||
+        normalized.includes('duplicate') ||
+        normalized.includes('registered');
+
+      if (isDuplicateEmailError) {
+        setFieldErrors((prev) => ({
+          ...prev,
+          email: 'This email is already registered. Please use a different email.',
+        }));
+        Alert.alert('Email Already Exists', 'This email is already registered. Please use a different email.');
+        return;
+      }
+
+      Alert.alert('Create User Failed', errorMessage);
       return;
     }
 
     setNewEmail('');
     setNewPassword('');
     setNewName('');
+    setFieldErrors({});
     Alert.alert('Success', 'Employee account created.');
     router.replace('/(admin-tabs)/employees');
   };
@@ -69,30 +120,47 @@ export default function AddUserScreen() {
             <TextInput
               placeholder="Name (optional)"
               placeholderTextColor="#6b7280"
-              style={styles.input}
+              style={[styles.input, fieldErrors.name && styles.inputError]}
               value={newName}
-              onChangeText={setNewName}
+              onChangeText={(text) => {
+                setNewName(text);
+                if (fieldErrors.name) {
+                  setFieldErrors((prev) => ({ ...prev, name: undefined }));
+                }
+              }}
               editable={!submitting}
             />
+            {fieldErrors.name ? <Text style={styles.errorText}>{fieldErrors.name}</Text> : null}
             <Text style={styles.inputLabel}>Email</Text>
             <TextInput
               placeholder="Email"
               placeholderTextColor="#6b7280"
-              style={styles.input}
+              style={[styles.input, fieldErrors.email && styles.inputError]}
               value={newEmail}
-              onChangeText={setNewEmail}
+              onChangeText={(text) => {
+                setNewEmail(text);
+                if (fieldErrors.email) {
+                  setFieldErrors((prev) => ({ ...prev, email: undefined }));
+                }
+              }}
               keyboardType="email-address"
               autoCapitalize="none"
               editable={!submitting}
             />
+            {fieldErrors.email ? <Text style={styles.errorText}>{fieldErrors.email}</Text> : null}
             <Text style={styles.inputLabel}>Password</Text>
-            <View style={styles.passwordContainer}>
+            <View style={[styles.passwordContainer, fieldErrors.password && styles.inputError]}>
               <TextInput
                 placeholder="Password"
                 placeholderTextColor="#6b7280"
                 style={styles.passwordInput}
                 value={newPassword}
-                onChangeText={setNewPassword}
+                onChangeText={(text) => {
+                  setNewPassword(text);
+                  if (fieldErrors.password) {
+                    setFieldErrors((prev) => ({ ...prev, password: undefined }));
+                  }
+                }}
                 secureTextEntry={!showPassword}
                 editable={!submitting}
               />
@@ -104,6 +172,7 @@ export default function AddUserScreen() {
                 <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color="#6b7280" />
               </TouchableOpacity>
             </View>
+            {fieldErrors.password ? <Text style={styles.errorText}>{fieldErrors.password}</Text> : null}
             <TouchableOpacity style={styles.createButton} onPress={handleCreateUser} disabled={submitting}>
               <Text style={styles.createButtonText}>{submitting ? 'Creating...' : 'Create User'}</Text>
             </TouchableOpacity>
@@ -174,6 +243,9 @@ const styles = StyleSheet.create({
     color: '#111111',
     backgroundColor: '#ffffff',
   },
+  inputError: {
+    borderColor: '#dc2626',
+  },
   passwordContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -181,6 +253,11 @@ const styles = StyleSheet.create({
     borderColor: '#d1d5db',
     borderRadius: 10,
     backgroundColor: '#ffffff',
+  },
+  errorText: {
+    fontSize: 12,
+    color: '#dc2626',
+    marginTop: -4,
   },
   passwordInput: {
     flex: 1,

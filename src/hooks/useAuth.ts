@@ -104,12 +104,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       data: { subscription },
     } = AuthService.subscribeToAuthChanges(async (event, session) => {
       if (!session?.user) {
-        setAuthStateSafe({
+        setAuthStateSafe((prev) => ({
           user: null,
           profile: null,
           loading: false,
-          error: null,
-        });
+          error: prev.error,
+        }));
         return;
       }
 

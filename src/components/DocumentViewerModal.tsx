@@ -16,6 +16,11 @@ const isImageFile = (nameOrUrl?: string | null) => {
   return /\.(jpg|jpeg|png|gif|bmp|webp)(\?|$)/i.test(nameOrUrl);
 };
 
+const isPdfFile = (nameOrUrl?: string | null) => {
+  if (!nameOrUrl) return false;
+  return /\.pdf(\?|$)/i.test(nameOrUrl);
+};
+
 export default function DocumentViewerModal({
   visible,
   onClose,
@@ -24,8 +29,12 @@ export default function DocumentViewerModal({
   loading = false,
 }: DocumentViewerModalProps) {
   const showImage = isImageFile(fileName) || isImageFile(fileUrl);
+  const showPdf = isPdfFile(fileName) || isPdfFile(fileUrl);
   const safeUrl = fileUrl || '';
   const isWeb = Platform.OS === 'web';
+  const mobilePdfViewerUrl = safeUrl
+    ? `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(safeUrl)}`
+    : '';
 
   const openInBrowser = async () => {
     if (!safeUrl) return;
@@ -61,10 +70,18 @@ export default function DocumentViewerModal({
               <View style={styles.webImageContainer}>
                 <Image source={{ uri: safeUrl }} style={styles.webImage} resizeMode="contain" />
               </View>
+            ) : showPdf ? (
+              <View style={styles.webPdfContainer}>
+                <iframe
+                  src={`${safeUrl}#view=FitH`}
+                  style={styles.webPdfIframe as React.CSSProperties}
+                  title={fileName || 'Document'}
+                />
+              </View>
             ) : (
               <View style={styles.loadingContainer}>
                 <Text style={styles.loadingText}>
-                  Document preview is not supported in-app on web.
+                  This file type is not supported in-app on web.
                 </Text>
                 <TouchableOpacity style={styles.openButton} onPress={openInBrowser}>
                   <Text style={styles.openButtonText}>Open in new tab</Text>
@@ -91,7 +108,9 @@ export default function DocumentViewerModal({
   </body>
 </html>`,
                     }
-                  : { uri: safeUrl }
+                  : showPdf
+                    ? { uri: mobilePdfViewerUrl }
+                    : { uri: safeUrl }
               }
               style={styles.viewer}
               startInLoadingState
@@ -168,6 +187,16 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
+  },
+  webPdfContainer: {
+    flex: 1,
+    backgroundColor: '#111111',
+  },
+  webPdfIframe: {
+    width: '100%',
+    height: '100%',
+    borderWidth: 0,
+    borderColor: 'transparent',
   },
   openButton: {
     marginTop: 14,

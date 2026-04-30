@@ -29,6 +29,9 @@ const parseBearerToken = (authorizationHeader: string | null): string | null => 
 const isValidRole = (role: string | undefined): role is 'admin' | 'employee' =>
   role === 'admin' || role === 'employee';
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 8;
+
 const getActiveUsersLast7Days = async (adminClient: ReturnType<typeof createClient>): Promise<number> => {
   const threshold = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const thresholdIso = threshold.toISOString();
@@ -153,17 +156,41 @@ Deno.serve(async (req) => {
     switch (payload.operation) {
       case 'create_user': {
         const role = payload.role ?? 'employee';
-        if (!payload.email || !payload.password || !isValidRole(role)) {
-          return json(400, { error: 'Invalid create_user payload' });
+        const email = payload.email?.trim().toLowerCase() ?? '';
+        const password = payload.password ?? '';
+        const name = payload.name?.trim() ?? '';
+
+        if (!email) {
+          return json(400, { error: 'Email is required' });
+        }
+
+        if (!EMAIL_REGEX.test(email)) {
+          return json(400, { error: 'Please enter a valid email address' });
+        }
+
+        if (!password) {
+          return json(400, { error: 'Password is required' });
+        }
+
+        if (password.length < MIN_PASSWORD_LENGTH) {
+          return json(400, { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+        }
+
+        if (!isValidRole(role)) {
+          return json(400, { error: 'Invalid role' });
+        }
+
+        if (name && name.length < 2) {
+          return json(400, { error: 'Name must be at least 2 characters' });
         }
 
         const { data: created, error: createError } = await adminClient.auth.admin.createUser({
-          email: payload.email,
-          password: payload.password,
+          email,
+          password,
           email_confirm: true,
           user_metadata: {
             role,
-            name: payload.name ?? '',
+            name,
           },
         });
 
@@ -176,8 +203,8 @@ Deno.serve(async (req) => {
           .upsert({
             id: created.user.id,
             role,
-            email: payload.email,
-            name: payload.name ?? '',
+            email,
+            name,
             is_blocked: false,
             blocked_at: null,
             blocked_reason: null,
@@ -194,7 +221,7 @@ Deno.serve(async (req) => {
           action: 'create_user',
           target_user_id: created.user.id,
           performed_by: caller.id,
-          metadata: { role, email: payload.email },
+          metadata: { role, email },
         });
 
         return json(200, { success: true, userId: created.user.id });

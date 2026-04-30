@@ -9,15 +9,16 @@ import {
   StatusBar,
   Platform,
   Image,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Card,
-  Button,
   ActivityIndicator,
 } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
+import Svg, { Circle, G } from 'react-native-svg';
 import { supabase } from '../../src/services/supabase/supabaseClient';
 import AuthGuard from '../../src/components/AuthGuard';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -64,6 +65,11 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [statusData, setStatusData] = useState<StatusData[]>([]);
   const [storageUsedBytes, setStorageUsedBytes] = useState(0);
+  const [selectedStatusLabel, setSelectedStatusLabel] = useState<string | null>(null);
+  const donutSize = 140;
+  const donutStrokeWidth = 24;
+  const donutRadius = (donutSize - donutStrokeWidth) / 2;
+  const donutCircumference = 2 * Math.PI * donutRadius;
 
   const formatStorageSize = (bytes: number) => {
     if (!Number.isFinite(bytes) || bytes <= 0) return '0 MB';
@@ -172,6 +178,7 @@ export default function AdminDashboard() {
         { label: 'Recent', value: recentDocsCount, color: '#3b82f6', percentage: Math.round((recentDocsCount / totalDocs) * 100) },
         { label: 'Older', value: oldDocsCount, color: '#10b981', percentage: Math.round((oldDocsCount / totalDocs) * 100) },
       ]);
+      setSelectedStatusLabel(null);
 
     } catch (error) {
       console.error('Dashboard data fetch error:', error);
@@ -256,6 +263,23 @@ export default function AdminDashboard() {
       onPress: () => router.push('/settings'),
     },
   ];
+  const totalStatusValue = statusData.reduce((acc, item) => acc + item.value, 0);
+  const selectedStatus =
+    statusData.find((item) => item.label === selectedStatusLabel) ?? null;
+  let runningValue = 0;
+  const donutSegments = statusData
+    .filter((item) => item.value > 0)
+    .map((item) => {
+      const segmentLength = (item.value / totalStatusValue) * donutCircumference;
+      const dashOffset = -((runningValue / totalStatusValue) * donutCircumference);
+      runningValue += item.value;
+
+      return {
+        ...item,
+        segmentLength,
+        dashOffset,
+      };
+    });
 
   if (loading) {
     return (
@@ -383,14 +407,49 @@ export default function AdminDashboard() {
                 {/* Donut Chart */}
                 <View style={styles.donutChartContainer}>
                   <View style={styles.donutChart}>
-                    {statusData.length > 0 ? (
+                    {totalStatusValue > 0 ? (
                       <>
-                        <View style={[styles.donutSegment, styles.donutSegment1, { borderColor: statusData[0]?.color }]} />
-                        <View style={[styles.donutSegment, styles.donutSegment2, { borderColor: statusData[1]?.color }]} />
-                        <View style={[styles.donutSegment, styles.donutSegment3, { borderColor: statusData[2]?.color }]} />
+                        <Svg width={donutSize} height={donutSize} style={styles.donutSvg}>
+                          <G rotation="-90" origin={`${donutSize / 2}, ${donutSize / 2}`}>
+                            {donutSegments.map((segment) => (
+                              <Circle
+                                key={segment.label}
+                                cx={donutSize / 2}
+                                cy={donutSize / 2}
+                                r={donutRadius}
+                                fill="transparent"
+                                stroke={segment.color}
+                                strokeWidth={donutStrokeWidth}
+                                strokeLinecap="butt"
+                                strokeDasharray={`${segment.segmentLength} ${donutCircumference - segment.segmentLength}`}
+                                strokeDashoffset={segment.dashOffset}
+                                onPress={() =>
+                                  setSelectedStatusLabel((prev) =>
+                                    prev === segment.label ? null : segment.label
+                                  )
+                                }
+                                onPressIn={() => setSelectedStatusLabel(segment.label)}
+                                opacity={
+                                  selectedStatusLabel && selectedStatusLabel !== segment.label ? 0.35 : 1
+                                }
+                              />
+                            ))}
+                          </G>
+                        </Svg>
                         <View style={styles.donutCenter}>
-                          <Text style={styles.donutTotal}>{statusData.reduce((acc, s) => acc + s.value, 0)}</Text>
-                          <Text style={styles.donutLabel}>Total</Text>
+                          <Text
+                            style={[
+                              styles.donutTotal,
+                              selectedStatus ? { color: selectedStatus.color } : null,
+                            ]}
+                          >
+                            {selectedStatus ? selectedStatus.value : totalStatusValue}
+                          </Text>
+                          <Text style={styles.donutLabel}>
+                            {selectedStatus
+                              ? `${selectedStatus.label} (${selectedStatus.percentage}%)`
+                              : 'Total'}
+                          </Text>
                         </View>
                       </>
                     ) : (
@@ -411,7 +470,20 @@ export default function AdminDashboard() {
                 >
                   {statusData.length > 0 ? (
                     statusData.map((status, index) => (
-                      <View key={index} style={styles.legendItem}>
+                      <Pressable
+                        key={index}
+                        style={[
+                          styles.legendItem,
+                          selectedStatusLabel === status.label && styles.legendItemActive,
+                        ]}
+                        onPress={() =>
+                          setSelectedStatusLabel((prev) =>
+                            prev === status.label ? null : status.label
+                          )
+                        }
+                        onHoverIn={() => setSelectedStatusLabel(status.label)}
+                        onHoverOut={() => setSelectedStatusLabel(null)}
+                      >
                         <View style={styles.legendLeft}>
                           <View style={[styles.legendDot, { backgroundColor: status.color }]} />
                           <Text style={styles.legendLabel} numberOfLines={1}>
@@ -421,7 +493,7 @@ export default function AdminDashboard() {
                         <Text style={styles.legendValue} numberOfLines={1}>
                           {status.value} ({status.percentage}%)
                         </Text>
-                      </View>
+                      </Pressable>
                     ))
                   ) : (
                     <View style={styles.emptyLegend}>
@@ -572,11 +644,6 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginBottom: 4,
   },
-  welcomeHeader: {
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 24,
-  },
   welcomeTitle: {
     fontSize: 20,
     fontWeight: '700',
@@ -693,31 +760,10 @@ const styles = StyleSheet.create({
     position: 'relative',
     backgroundColor: '#f3f4f6',
   },
-  donutSegment: {
+  donutSvg: {
     position: 'absolute',
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    borderWidth: 24,
-    borderColor: 'transparent',
-  },
-  donutSegment1: {
-    borderTopColor: '#f97316',
-    borderRightColor: '#f97316',
-    transform: [{ rotate: '-45deg' }],
-    zIndex: 3,
-  },
-  donutSegment2: {
-    borderBottomColor: '#3b82f6',
-    borderLeftColor: '#3b82f6',
-    transform: [{ rotate: '45deg' }],
-    zIndex: 2,
-  },
-  donutSegment3: {
-    borderTopColor: '#10b981',
-    borderLeftColor: '#10b981',
-    transform: [{ rotate: '135deg' }],
-    zIndex: 1,
+    top: 0,
+    left: 0,
   },
   donutCenter: {
     position: 'absolute',
@@ -764,6 +810,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#f3f4f6',
   },
+  legendItemActive: {
+    borderColor: '#cbd5e1',
+    backgroundColor: '#f1f5f9',
+  },
   legendLeft: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -775,12 +825,6 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
     marginRight: 10,
-  },
-  legendTextContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
   },
   legendLabel: {
     fontSize: 15,

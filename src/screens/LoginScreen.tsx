@@ -7,11 +7,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Alert,
 } from 'react-native';
 import {
   Button,
   TextInput,
-  ActivityIndicator,
   Snackbar,
 } from 'react-native-paper';
 import { useAuth } from '../hooks/useAuth';
@@ -21,15 +21,27 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [localError, setLocalError] = useState('');
   
   const router = useRouter();
   const { login, loading, error, clearError } = useAuth();
 
+  const showLoginError = (message: string) => {
+    setLocalError(message);
+    if (Platform.OS === 'web') {
+      globalThis.alert?.(message);
+      return;
+    }
+    Alert.alert('Login Failed', message);
+  };
+
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
+      showLoginError('Email and password are required.');
       return;
     }
 
+    setLocalError('');
     const result = await login({
       email: email.trim(),
       password: password.trim(),
@@ -44,12 +56,21 @@ export default function LoginScreen() {
       } else {
         router.replace('/(tabs)/dashboard');
       }
+      return;
+    }
+
+    if (!result.success) {
+      const message = result.error || 'Incorrect email or password.';
+      showLoginError(message);
     }
   };
 
   const dismissError = () => {
+    setLocalError('');
     clearError();
   };
+
+  const displayedError = localError || error;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -66,7 +87,10 @@ export default function LoginScreen() {
               <TextInput
                 label="Email"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(value) => {
+                  setEmail(value);
+                  if (localError) setLocalError('');
+                }}
                 mode="outlined"
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -78,7 +102,10 @@ export default function LoginScreen() {
               <TextInput
                 label="Password"
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(value) => {
+                  setPassword(value);
+                  if (localError) setLocalError('');
+                }}
                 mode="outlined"
                 secureTextEntry={!showPassword}
                 right={
@@ -101,18 +128,23 @@ export default function LoginScreen() {
               >
                 {loading ? 'Signing In...' : 'Sign In'}
               </Button>
+              {displayedError ? (
+                <View style={styles.inlineErrorContainer}>
+                  <Text style={styles.inlineErrorText}>{displayedError}</Text>
+                </View>
+              ) : null}
             </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
       <Snackbar
-        visible={!!error}
+        visible={!!displayedError}
         onDismiss={dismissError}
         duration={4000}
         style={styles.snackbar}
       >
-        {error}
+        {displayedError}
       </Snackbar>
     </SafeAreaView>
   );
@@ -164,5 +196,19 @@ const styles = StyleSheet.create({
   },
   snackbar: {
     marginBottom: 16,
+  },
+  inlineErrorText: {
+    color: '#dc2626',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  inlineErrorContainer: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    backgroundColor: '#fef2f2',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
 });
