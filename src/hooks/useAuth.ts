@@ -24,6 +24,7 @@ const AuthContext = createContext<UseAuthReturn | null>(null);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const isMounted = useRef(true);
+  const hasInitializedRef = useRef(false);
   const profileRequestInFlightRef = useRef<Promise<any> | null>(null);
   const lastProfileFetchAtRef = useRef(0);
   const cachedProfileRef = useRef<any>(null);
@@ -93,6 +94,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         loading: false,
         error: null,
       });
+    } finally {
+      hasInitializedRef.current = true;
     }
   }, [setAuthStateSafe]);
 
@@ -113,6 +116,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         : never
     ) => {
       try {
+        if (!hasInitializedRef.current && !session?.user) {
+          return;
+        }
+
         if (!session?.user) {
           setAuthStateSafe((prev) => ({
             user: null,

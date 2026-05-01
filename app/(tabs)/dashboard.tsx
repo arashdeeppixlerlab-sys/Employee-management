@@ -26,6 +26,15 @@ export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const { profile, refreshProfile } = useAuth();
   const { documents, loading, fetchDocuments } = useDocuments();
+  const getGreetingByTime = () => {
+    const hour = new Date().getHours();
+
+    if (hour < 12) return 'Good morning!';
+    if (hour < 17) return 'Good afternoon!';
+    if (hour < 21) return 'Good evening!';
+    return 'Good night!';
+  };
+
   const recentDocuments = [...documents]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 5);
@@ -92,7 +101,7 @@ export default function DashboardScreen() {
                   </View>
                 )}
                 <View style={styles.headerText}>
-                  <Text style={styles.greeting}>Good morning!</Text>
+                  <Text style={styles.greeting}>{getGreetingByTime()}</Text>
                   <Text style={styles.userName}>
                     {profile?.name?.trim() || profile?.email?.split('@')[0] || 'User'}
                   </Text>

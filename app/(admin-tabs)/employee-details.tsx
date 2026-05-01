@@ -168,11 +168,6 @@ export default function EmployeeDetails() {
               <Text style={styles.detailValue}>{employee.role}</Text>
             </View>
             
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Employee ID</Text>
-              <Text style={styles.detailValue}>{employee.id}</Text>
-            </View>
-            
             <View style={[styles.detailRow, styles.detailRowLast]}>
               <Text style={styles.detailLabel}>Joined</Text>
               <Text style={styles.detailValue}>

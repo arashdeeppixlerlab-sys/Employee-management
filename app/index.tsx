@@ -16,10 +16,7 @@ export default function Index() {
     setRecoveringProfile(true);
 
     const recover = async () => {
-      const ok = await refreshProfile();
-      if (!ok) {
-        router.replace('/login');
-      }
+      await refreshProfile();
       setRecoveringProfile(false);
     };
 
@@ -37,7 +34,6 @@ export default function Index() {
     if (!profile) {
       if (!recoveryAttemptedRef.current) return;
       if (recoveringProfile) return;
-      router.replace('/login');
       return;
     } else if (profile?.role === 'admin') {
       router.replace('/(admin-tabs)/dashboard');
