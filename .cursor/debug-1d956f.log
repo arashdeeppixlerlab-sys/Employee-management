@@ -1,0 +1,4 @@
+{"sessionId":"1d956f","runId":"pre-fix","hypothesisId":"H5","location":"settings.handleChangePassword:entry","message":"UI change password submitted","data":{"currentLength":8,"nextLength":9,"confirmLength":9},"timestamp":1777556465873}
+{"sessionId":"1d956f","runId":"pre-fix","hypothesisId":"H1-H4","location":"AuthService.changePassword:entry","message":"Change password started","data":{"hasCurrentPassword":true,"newPasswordLength":9},"timestamp":1777556465874}
+{"sessionId":"1d956f","runId":"pre-fix","hypothesisId":"H5","location":"settings.handleChangePassword:result","message":"UI received password change result","data":{"success":false,"error":"Network is slow. Please try again."},"timestamp":1777556495877}
+{"sessionId":"1d956f","runId":"pre-fix","hypothesisId":"H1-H4","location":"AuthService.changePassword:catch","message":"Change password failed in catch","data":{"errorMessage":"Session lookup timed out. Please try again."},"timestamp":1777556495877}
