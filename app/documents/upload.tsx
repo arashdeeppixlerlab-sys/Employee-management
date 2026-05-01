@@ -22,6 +22,15 @@ import { supabase } from '../../src/services/supabase/supabaseClient';
 import AuthGuard from '../../src/components/AuthGuard';
 import { notifyDocumentsChanged } from '../../src/utils/documentsSync';
 
+const isInvalidRefreshTokenError = (message?: string) => {
+  const value = (message ?? '').toLowerCase();
+  return (
+    value.includes('invalid refresh token') ||
+    value.includes('refresh token not found') ||
+    value.includes('invalid session')
+  );
+};
+
 export default function DocumentUploadScreen() {
   const router = useRouter();
   const canGoBack = router.canGoBack();
@@ -71,7 +80,18 @@ export default function DocumentUploadScreen() {
       // Get current authenticated user
       const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-      if (authError || !user) {
+      if (authError) {
+        if (isInvalidRefreshTokenError(authError.message)) {
+          await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+          setError('Your session expired. Please login again.');
+          router.replace('/login');
+          return;
+        }
+        setError(authError.message || 'User not authenticated');
+        return;
+      }
+
+      if (!user) {
         setError('User not authenticated');
         return;
       }

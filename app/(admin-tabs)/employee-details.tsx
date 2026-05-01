@@ -68,7 +68,7 @@ export default function EmployeeDetails() {
       setSelectedDocument({ ...doc, file_url: resolvedUrl });
       setViewerVisible(true);
     } catch (e) {
-      console.log('[VIEW_DEBUG][ADMIN-EMPLOYEE] openURL error:', e);
+      console.error('[VIEW_DEBUG][ADMIN-EMPLOYEE] openURL error:', e);
       Alert.alert('Error', 'Failed to open document');
     } finally {
       setViewerLoading(false);
@@ -96,7 +96,6 @@ export default function EmployeeDetails() {
 
     fetchEmployee();
   }, [id]);
-console.log("admin employee id:" ,employee?.id);
   const fetchEmployeeDocuments = async (employeeId: string) => {
     setDocumentsLoading(true);
     try {

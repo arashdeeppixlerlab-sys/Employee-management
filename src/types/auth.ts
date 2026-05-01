@@ -22,6 +22,7 @@ export interface Profile {
 
 export interface AuthResponse {
   success: boolean;
+  user?: any;
   profile?: Profile;
   error?: string;
 }

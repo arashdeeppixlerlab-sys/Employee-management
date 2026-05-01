@@ -2,7 +2,7 @@ import 'react-native-url-polyfill/auto';
 import React from 'react';
 import { Stack } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Platform } from 'react-native';
 import { AuthProvider, useAuth } from '../src/hooks/useAuth';
 import { I18nProvider, useI18n } from '../src/i18n';
 
@@ -42,7 +42,12 @@ function AppShell() {
   }
 
   return (
-    <PaperProvider theme={theme}>
+    <PaperProvider
+      theme={theme}
+      settings={{
+        rippleEffectEnabled: Platform.OS !== 'web',
+      }}
+    >
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" options={{ title: t('app.title') }} />
         <Stack.Screen name="login/index" options={{ title: t('app.login'), headerShown: false }} />

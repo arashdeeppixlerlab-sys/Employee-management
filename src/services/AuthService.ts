@@ -2,6 +2,65 @@ import { supabase } from './supabase/supabaseClient';
 import { AuthResponse, LoginCredentials, Profile } from '../types/auth';
 
 export class AuthService {
+  private static readonly SIGN_OUT_NETWORK_MS = 12000;
+  /** If updateUser never resolves (common when auth listener blocks the client), stop waiting and verify. */
+  private static readonly PASSWORD_UPDATE_WAIT_MS = 10000;
+  private static readonly PASSWORD_LOCK_DRAIN_WAIT_MS = 300;
+  private static readonly CHANGE_PASSWORD_TOTAL_WAIT_MS = 10000;
+
+  /** Ensures the next auth call waits until a prior password `updateUser` finishes (same processLock as getSession). */
+  private static inFlightPasswordUpdate: Promise<void> | null = null;
+
+  private static async drainInFlightPasswordUpdate(): Promise<void> {
+    const inFlight = AuthService.inFlightPasswordUpdate;
+    if (!inFlight) return;
+
+    await Promise.race([
+      inFlight,
+      new Promise<void>((resolve) =>
+        setTimeout(resolve, AuthService.PASSWORD_LOCK_DRAIN_WAIT_MS)
+      ),
+    ]).catch(() => {});
+
+    if (AuthService.inFlightPasswordUpdate === inFlight) {
+      AuthService.inFlightPasswordUpdate = null;
+    }
+  }
+
+  private static async updateUserPasswordWithDeadline(
+    newPassword: string
+  ): Promise<
+    | { kind: 'ok'; error: { message?: string } | null }
+    | { kind: 'timeout' }
+    | { kind: 'thrown' }
+  > {
+    try {
+      const updatePromise = supabase.auth.updateUser({ password: newPassword });
+      const tracked = updatePromise
+        .then(() => undefined)
+        .catch(() => undefined);
+      const completion = tracked.finally(() => {
+        if (AuthService.inFlightPasswordUpdate === completion) {
+          AuthService.inFlightPasswordUpdate = null;
+        }
+      });
+      AuthService.inFlightPasswordUpdate = completion;
+
+      const result = await Promise.race([
+        updatePromise.then((r) => ({
+          kind: 'ok' as const,
+          error: r.error,
+        })),
+        new Promise<{ kind: 'timeout' }>((resolve) =>
+          setTimeout(() => resolve({ kind: 'timeout' }), this.PASSWORD_UPDATE_WAIT_MS)
+        ),
+      ]);
+      return result;
+    } catch {
+      return { kind: 'thrown' };
+    }
+  }
+
   private static getFriendlyLoginError(message?: string): string {
     if (!message) return 'Login failed. Please try again.';
     const normalized = message.toLowerCase();
@@ -80,6 +139,7 @@ export class AuthService {
 
       return {
         success: true,
+        user: authData.user,
         profile,
       };
     } catch (error) {
@@ -158,6 +218,10 @@ export class AuthService {
         profile,
       };
     } catch (error) {
+      if (this.isInvalidRefreshTokenError(error)) {
+        await this.safeLogout();
+        return { user: null, profile: null };
+      }
       console.error('Get current user error:', error);
       return { user: null, profile: null };
     }
@@ -165,55 +229,115 @@ export class AuthService {
 
   static async safeLogout(): Promise<void> {
     try {
-      await supabase.auth.signOut({ scope: 'local' });
-    } catch {}
+      await Promise.race([
+        supabase.auth.signOut(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('signOut timeout')), this.SIGN_OUT_NETWORK_MS)
+        ),
+      ]);
+    } catch {
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch {}
+    }
   }
 
   static async changePassword(
     currentPassword: string,
-    newPassword: string
+    newPassword: string,
+    userEmail?: string | null
+  ): Promise<{ success: boolean; error?: string }> {
+    return Promise.race([
+      this.changePasswordInternal(currentPassword, newPassword, userEmail),
+      new Promise<{ success: boolean; error?: string }>((resolve) =>
+        setTimeout(
+          () => resolve({ success: false, error: 'Password update timed out. Please try again.' }),
+          this.CHANGE_PASSWORD_TOTAL_WAIT_MS
+        )
+      ),
+    ]);
+  }
+
+  private static async changePasswordInternal(
+    currentPassword: string,
+    newPassword: string,
+    userEmail?: string | null
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user?.email) {
+      if (!process.env.EXPO_PUBLIC_SUPABASE_URL || !process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) {
         return {
           success: false,
-          error: 'User not authenticated',
+          error: 'Missing Supabase configuration',
         };
       }
 
-      const { error: reauthError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: currentPassword,
-      });
+      await AuthService.drainInFlightPasswordUpdate();
 
-      if (reauthError) {
+      let email = (userEmail ?? '').trim();
+
+      if (!email) {
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) {
+          return {
+            success: false,
+            error: 'Your session expired. Please login again.',
+          };
+        }
+        email = (sessionData?.session?.user?.email ?? '').trim();
+      }
+
+      if (!email) {
+        const {
+          data: { user: fallbackUser },
+        } = await supabase.auth.getUser();
+        email = (fallbackUser?.email ?? '').trim();
+      }
+
+      if (!email) {
         return {
           success: false,
-          error: 'Current password is incorrect',
+          error: 'Unable to verify your account. Please login again.',
         };
       }
 
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
+      const updateOutcome = await this.updateUserPasswordWithDeadline(newPassword);
 
-      if (updateError) {
+      if (updateOutcome.kind === 'timeout') {
         return {
           success: false,
-          error: updateError.message || 'Failed to update password',
+          error: 'Password update is taking too long. Please try again.',
         };
       }
 
-      return { success: true };
-    } catch (error) {
+      if (updateOutcome.kind === 'thrown') {
+        return {
+          success: false,
+          error: 'Network is slow. Please try again.',
+        };
+      }
+
+      const updateError = updateOutcome.error;
+      if (!updateError) {
+        return { success: true };
+      }
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to update password',
+        error: updateError.message || 'Failed to update password',
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to update password';
+      const m = message.toLowerCase();
+      if (m.includes('network request failed') || m.includes('failed to fetch')) {
+        return {
+          success: false,
+          error: 'Network is slow. Please try again.',
+        };
+      }
+      return {
+        success: false,
+        error: message,
       };
     }
   }

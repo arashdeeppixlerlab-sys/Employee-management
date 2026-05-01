@@ -22,9 +22,17 @@ import { ProfilePhotoService } from '../../src/services/ProfilePhotoService';
 import { confirmAction } from '../../src/utils/confirmAction';
 
 const { width } = Dimensions.get('window');
+const isInvalidRefreshTokenError = (message?: string) => {
+  const value = (message ?? '').toLowerCase();
+  return (
+    value.includes('invalid refresh token') ||
+    value.includes('refresh token not found') ||
+    value.includes('invalid session')
+  );
+};
 
 export default function AdminProfile() {
-  const { refreshProfile } = useAuth();
+  const { refreshProfile, logout } = useAuth();
   const insets = useSafeAreaInsets();
   const [userId, setUserId] = useState<string | null>(null);
   const [profile, setProfile] = useState<{
@@ -63,7 +71,16 @@ export default function AdminProfile() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+        if (authError) {
+          if (isInvalidRefreshTokenError(authError.message)) {
+            await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+            router.replace('/login');
+            return;
+          }
+          throw authError;
+        }
 
         if (!user) return;
         setUserId(user.id);
@@ -90,7 +107,7 @@ export default function AdminProfile() {
         if (docCount !== null) setDocumentCount(docCount);
 
       } catch (error) {
-        console.log('Error:', error);
+        console.error('Error:', error);
       } finally {
         setLoading(false);
       }
@@ -186,7 +203,6 @@ export default function AdminProfile() {
           return { success: false as const, error };
         }
 
-        console.log('[PROFILE_SAVE_DEBUG][ADMIN] Removing missing column from payload:', missingColumn);
         const { [missingColumn]: _, ...rest } = remainingPayload;
         remainingPayload = rest;
       }
@@ -302,16 +318,10 @@ export default function AdminProfile() {
     if (!confirmed) return;
 
     try {
-      const { error } = await supabase.auth.signOut();
-
-      if (!error) {
-        router.replace('/login'); // ✅ CRITICAL FIX
-      } else {
-        console.log('Logout error:', error);
-      }
-    } catch (e) {
-      console.log('Logout crash:', e);
-      router.replace('/login'); // fallback
+      await logout();
+      router.replace('/login');
+    } catch {
+      router.replace('/login');
     }
   };
 

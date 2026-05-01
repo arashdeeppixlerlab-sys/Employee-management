@@ -26,7 +26,7 @@ import { confirmAction } from '../../src/utils/confirmAction';
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user, profile: authProfile, refreshProfile } = useAuth();
+  const { user, profile: authProfile, refreshProfile, logout } = useAuth();
   const [displayProfile, setDisplayProfile] = React.useState<any>(authProfile);
   const [editMode, setEditMode] = React.useState(false);
   const [photoLoading, setPhotoLoading] = React.useState(false);
@@ -160,7 +160,6 @@ export default function ProfileScreen() {
           return { success: false as const, error };
         }
 
-        console.log('[PROFILE_SAVE_DEBUG] Removing missing column from payload:', missingColumn);
         // Remove missing column and retry
         const { [missingColumn]: _, ...rest } = remainingPayload;
         remainingPayload = rest;
@@ -282,13 +281,9 @@ export default function ProfileScreen() {
     if (!confirmed) return;
 
     try {
-      console.log('Signing out...');
-      await supabase.auth.signOut();
-      console.log('Sign out successful, redirecting to login');
+      await logout();
       router.replace('/login');
-    } catch (error) {
-      console.error('Sign out error:', error);
-      // Still redirect even if there's an error
+    } catch {
       router.replace('/login');
     }
   };

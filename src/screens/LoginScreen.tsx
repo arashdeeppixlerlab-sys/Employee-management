@@ -138,14 +138,16 @@ export default function LoginScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <Snackbar
-        visible={!!displayedError}
-        onDismiss={dismissError}
-        duration={4000}
-        style={styles.snackbar}
-      >
-        {displayedError}
-      </Snackbar>
+      {Platform.OS !== 'web' ? (
+        <Snackbar
+          visible={!!displayedError}
+          onDismiss={dismissError}
+          duration={4000}
+          style={styles.snackbar}
+        >
+          {displayedError}
+        </Snackbar>
+      ) : null}
     </SafeAreaView>
   );
 }

@@ -35,6 +35,14 @@ interface InvokePayload {
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 8;
+const isInvalidRefreshTokenError = (message?: string) => {
+  const value = (message ?? '').toLowerCase();
+  return (
+    value.includes('invalid refresh token') ||
+    value.includes('refresh token not found') ||
+    value.includes('invalid session')
+  );
+};
 
 const getFriendlyCreateUserError = (error?: string): string => {
   if (!error) return 'Failed to create user';
@@ -96,6 +104,13 @@ const invokeAdminFunction = async (payload: InvokePayload) => {
   } = await supabase.auth.getSession();
 
   if (sessionError) {
+    if (isInvalidRefreshTokenError(sessionError.message)) {
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+      return {
+        data: null,
+        errorMessage: 'Your session expired. Please login again.',
+      };
+    }
     return {
       data: null,
       errorMessage: sessionError.message,
